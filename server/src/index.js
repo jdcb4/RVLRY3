@@ -45,7 +45,12 @@ wordStore.startSchedule();
 const port = process.env.PORT ?? 3001;
 
 const bootstrap = async () => {
-  await wordStore.initialize();
+  try {
+    await wordStore.initialize();
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error(`Word store initialization failed: ${message}`);
+  }
 
   httpServer.listen(port, () => {
     console.log(`RVLRY server listening on ${port}`);
@@ -53,6 +58,7 @@ const bootstrap = async () => {
 };
 
 bootstrap().catch((error) => {
-  console.error('Failed to initialize word store', error);
+  const message = error instanceof Error ? error.message : String(error);
+  console.error(`Server bootstrap failed: ${message}`);
   process.exit(1);
 });
