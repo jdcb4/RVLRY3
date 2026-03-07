@@ -43,6 +43,16 @@ registerRoomHandlers(io, wordStore);
 wordStore.startSchedule();
 
 const port = process.env.PORT ?? 3001;
-httpServer.listen(port, () => {
-  console.log(`RVLRY server listening on ${port}`);
+
+const bootstrap = async () => {
+  await wordStore.initialize();
+
+  httpServer.listen(port, () => {
+    console.log(`RVLRY server listening on ${port}`);
+  });
+};
+
+bootstrap().catch((error) => {
+  console.error('Failed to initialize word store', error);
+  process.exit(1);
 });
