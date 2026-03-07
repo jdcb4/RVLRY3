@@ -1,0 +1,81 @@
+:root {
+  font-family: Inter, system-ui, sans-serif;
+  color: #eef0ff;
+  background: #0c1022;
+}
+
+body {
+  margin: 0;
+}
+
+.app-shell {
+  max-width: 580px;
+  margin: 0 auto;
+  min-height: 100vh;
+  padding: 1rem;
+}
+
+.logo {
+  color: #a8b7ff;
+  font-weight: 800;
+  text-decoration: none;
+  font-size: 1.6rem;
+}
+
+.grid {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.game-card {
+  background: linear-gradient(145deg, #172042, #111733);
+  color: white;
+  border: 1px solid #2b3569;
+  border-radius: 14px;
+  text-align: left;
+  padding: 1rem;
+}
+
+.lobby-form {
+  display: grid;
+  gap: 0.75rem;
+}
+
+input {
+  width: 100%;
+  margin-top: 0.3rem;
+  box-sizing: border-box;
+  border: 1px solid #3a4788;
+  background: #121a38;
+  color: #fff;
+  padding: 0.7rem;
+  border-radius: 10px;
+}
+
+.mode-toggle {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.5rem;
+}
+
+.mode-toggle button,
+.primary {
+  border: 0;
+  border-radius: 10px;
+  background: #4d67ff;
+  color: #fff;
+  padding: 0.7rem;
+}
+
+.mode-toggle .active {
+  background: #7a90ff;
+}
+
+.prompt-card {
+  margin: 1rem 0;
+  background: #141b3c;
+  border: 1px solid #33407c;
+  padding: 1rem;
+  border-radius: 12px;
+  font-size: 1.2rem;
+}
