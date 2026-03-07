@@ -39,7 +39,7 @@ const io = new Server(httpServer, {
   }
 });
 
-registerRoomHandlers(io);
+registerRoomHandlers(io, wordStore);
 wordStore.startSchedule();
 
 const port = process.env.PORT ?? 3001;

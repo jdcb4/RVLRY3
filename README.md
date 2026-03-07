@@ -6,14 +6,17 @@ RVLRY is a mobile-first party game web app with a shared launcher and extensible
 - **WhoWhatWhere** (Articulate-style clue game)
 - **DrawNGuess** (Telestrations-style drawing chain)
 
-## Features in this foundation
+## Current progress
 
 - React + Vite front-end optimized for mobile screens.
 - Socket.IO room/lobby service for multi-device sessions.
-- Local pass-and-play mode scaffold.
+- Host-based room start flow with per-player private game payloads.
+- Local pass-and-play mode scaffold with handoff/reveal controls.
 - Word list sync service integrated with WordListManager.
 - Weekly scheduled word refresh + manual sync endpoint.
 - Railway-friendly deployment with optional Docker self-hosting.
+
+A full phased implementation roadmap is available at `docs/IMPLEMENTATION_PLAN.md`.
 
 ## Local development
 
