@@ -24,6 +24,7 @@ body {
   background: #211b3c;
   border-radius: 16px;
   padding: 1rem;
+  margin-top: 1rem;
 }
 
 .actions {
@@ -33,6 +34,7 @@ body {
 
 .actions.stacked {
   flex-direction: column;
+  margin-top: 0.75rem;
 }
 
 button,
@@ -46,6 +48,10 @@ a {
   text-align: center;
   padding: 0.65rem 0.85rem;
   font-weight: 600;
+}
+
+button:disabled {
+  opacity: 0.5;
 }
 
 input {
