@@ -40,26 +40,29 @@ export function LocalMode() {
 
   if (!game?.supportsLocal) {
     return (
-      <main className="app-shell">
+      <main className="scene scene--simple">
         <p>This game does not support local mode yet.</p>
-        <button onClick={() => navigate('/')}>Back</button>
+        <button onClick={() => navigate(`/play/${gameId}`)}>Back</button>
       </main>
     );
   }
 
   return (
-    <main className="app-shell">
-      <h1>{game.name} — Pass &amp; Play</h1>
-      <p>{localInstructions[gameId]}</p>
-      <article className="card">
+    <main className="scene scene--local">
+      <header className="scene__header">
+        <p className="scene__eyebrow">Pass and play</p>
+        <h1 className="scene__title">{game.name} - Local mode</h1>
+        <p className="scene__lead">{localInstructions[gameId]}</p>
+      </header>
+      <article className="panel">
         <h2>Prompt</h2>
         <p>{isRevealed ? prompt : 'Hidden. Tap reveal when next player is ready.'}</p>
       </article>
-      {error && <p>{error}</p>}
-      <div className="actions stacked">
+      {error && <p className="connection-banner connection-banner--error">{error}</p>}
+      <div className="actions actions--stack">
         <button onClick={() => setIsRevealed((value) => !value)}>{isRevealed ? 'Hide' : 'Reveal'}</button>
         <button onClick={fetchPrompt}>Next handoff</button>
-        <button onClick={() => navigate('/')}>Done</button>
+        <button onClick={() => navigate(`/play/${game.id}`)}>Done</button>
       </div>
     </main>
   );

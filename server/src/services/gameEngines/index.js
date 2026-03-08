@@ -4,6 +4,12 @@ const GAME_WORD_TYPE = {
   drawnguess: 'describing'
 };
 
+const GAME_MIN_PLAYERS = {
+  imposter: 2,
+  whowhatwhere: 2,
+  drawnguess: 2
+};
+
 const randomItem = (items) => items[Math.floor(Math.random() * items.length)];
 
 const buildImposterState = ({ players, word }) => {
@@ -55,6 +61,10 @@ const GAME_BUILDERS = {
 
 export function getWordTypeForGame(gameId) {
   return GAME_WORD_TYPE[gameId] ?? 'describing';
+}
+
+export function getMinPlayersForGame(gameId) {
+  return GAME_MIN_PLAYERS[gameId] ?? 2;
 }
 
 export function buildGameStartState({ gameId, players, word }) {
