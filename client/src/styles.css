@@ -258,6 +258,13 @@ input:focus-visible {
   line-height: 1.5;
 }
 
+.stage-summary {
+  margin: 0;
+  font-family: 'Fraunces', Georgia, serif;
+  font-size: 1.35rem;
+  line-height: 1.2;
+}
+
 .status-pill,
 .badge {
   display: inline-flex;
@@ -320,6 +327,42 @@ input:focus-visible {
   border: 1px dashed var(--panel-border);
   padding: 1rem;
   color: var(--muted);
+}
+
+.drawing-surface {
+  width: min(100%, 320px);
+  border: 1px solid var(--panel-border);
+  border-radius: 18px;
+  background: #ffffff;
+  box-shadow: inset 0 0 0 1px rgba(17, 17, 17, 0.04);
+  touch-action: none;
+}
+
+.drawing-preview {
+  width: min(100%, 320px);
+  border-radius: 18px;
+  border: 1px solid var(--panel-border);
+  background: #ffffff;
+}
+
+.results-chain {
+  display: grid;
+  gap: 1rem;
+}
+
+.chain-item {
+  border-radius: 22px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.03);
+  padding: 1rem;
+}
+
+.chain-item__eyebrow {
+  margin: 0 0 0.45rem;
+  color: var(--success);
+  font-size: 0.74rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
 }
 
 .meta-list {

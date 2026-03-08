@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import {
+  applyGameAction,
   buildGameStartState,
   getMinPlayersForGame,
   getWordTypeForGame
@@ -12,13 +13,25 @@ const randomCode = () => Math.random().toString(36).slice(2, 8).toUpperCase();
 const normalizeCode = (code) => String(code ?? '').trim().toUpperCase();
 const normalizePlayerName = (playerName) => String(playerName ?? '').trim() || 'Player';
 
-const createPlayer = ({ playerToken, playerName, socketId, id = randomUUID(), ready = false }) => ({
+const createPlayer = ({
+  playerToken,
+  playerName,
+  socketId,
+  seat,
+  ready = false,
+  id = randomUUID()
+}) => ({
   id,
   playerToken,
   socketId,
+  seat,
   name: normalizePlayerName(playerName),
   ready
 });
+
+const sortPlayers = (room) => {
+  room.players.sort((left, right) => left.seat - right.seat);
+};
 
 const clearRoomExpiry = (room) => {
   if (room.expiryTimer) {
@@ -66,7 +79,9 @@ const movePlayerToRejoinSlots = (room, player) => {
   room.rejoinSlots.set(player.playerToken, {
     id: player.id,
     playerToken: player.playerToken,
-    name: player.name
+    name: player.name,
+    seat: player.seat,
+    ready: player.ready
   });
 };
 
@@ -81,11 +96,15 @@ const restorePlayerFromRejoinSlot = (room, playerToken, playerName, socketId) =>
     id: slot.id,
     playerToken: slot.playerToken,
     playerName: playerName || slot.name,
-    socketId
+    socketId,
+    seat: slot.seat,
+    ready: room.phase === 'lobby' ? false : slot.ready
   });
 };
 
 const syncHost = (room) => {
+  sortPlayers(room);
+
   if (room.players.some((player) => player.id === room.hostId)) {
     return;
   }
@@ -121,6 +140,17 @@ const emitPrivateState = (io, room, player) => {
   });
 };
 
+const resetRoomToLobby = (room) => {
+  room.phase = 'lobby';
+  room.gamePublicState = null;
+  room.gamePrivateState = new Map();
+  room.gameInternalState = null;
+
+  for (const player of room.players) {
+    player.ready = false;
+  }
+};
+
 export function registerRoomHandlers(io, wordStore) {
   io.on('connection', (socket) => {
     socket.on('room:create', ({ gameId, playerName, playerToken }, callback) => {
@@ -133,7 +163,8 @@ export function registerRoomHandlers(io, wordStore) {
       const player = createPlayer({
         playerToken,
         playerName,
-        socketId: socket.id
+        socketId: socket.id,
+        seat: 0
       });
       const room = {
         code,
@@ -141,9 +172,11 @@ export function registerRoomHandlers(io, wordStore) {
         phase: 'lobby',
         hostId: player.id,
         players: [player],
+        nextSeat: 1,
         rejoinSlots: new Map(),
         gamePublicState: null,
         gamePrivateState: new Map(),
+        gameInternalState: null,
         expiryTimer: null
       };
       rooms.set(code, room);
@@ -202,9 +235,12 @@ export function registerRoomHandlers(io, wordStore) {
       const player = createPlayer({
         playerToken,
         playerName,
-        socketId: socket.id
+        socketId: socket.id,
+        seat: room.nextSeat
       });
+      room.nextSeat += 1;
       room.players.push(player);
+      syncHost(room);
       socket.join(room.code);
       emitRoomUpdate(io, room);
       callback?.({ ok: true, code: room.code, playerId: player.id });
@@ -270,7 +306,9 @@ export function registerRoomHandlers(io, wordStore) {
         return;
       }
 
-      const { publicState, privateState } = buildGameStartState({
+      sortPlayers(room);
+
+      const { publicState, privateState, internalState } = buildGameStartState({
         gameId: room.gameId,
         players: room.players,
         word
@@ -279,11 +317,81 @@ export function registerRoomHandlers(io, wordStore) {
       room.phase = 'in-progress';
       room.gamePublicState = publicState;
       room.gamePrivateState = privateState;
+      room.gameInternalState = internalState;
 
-      for (const player of room.players) {
-        emitPrivateState(io, room, player);
+      for (const roomPlayer of room.players) {
+        emitPrivateState(io, room, roomPlayer);
       }
 
+      emitRoomUpdate(io, room);
+      callback?.({ ok: true });
+    });
+
+    socket.on('game:action', ({ code, type, payload }, callback) => {
+      const room = rooms.get(normalizeCode(code));
+      if (!room) {
+        callback?.({ error: 'Room not found' });
+        return;
+      }
+
+      if (room.phase !== 'in-progress') {
+        callback?.({ error: 'The room is not in an active game' });
+        return;
+      }
+
+      const player = getPlayerBySocketId(room, socket.id);
+      if (!player) {
+        callback?.({ error: 'Player not found in room' });
+        return;
+      }
+
+      const result = applyGameAction({
+        gameId: room.gameId,
+        players: room.players,
+        playerId: player.id,
+        action: { type, payload },
+        publicState: room.gamePublicState,
+        privateState: room.gamePrivateState,
+        internalState: room.gameInternalState,
+        wordStore
+      });
+
+      if (result.error) {
+        callback?.({ error: result.error });
+        return;
+      }
+
+      room.gamePublicState = result.publicState;
+      room.gamePrivateState = result.privateState;
+      room.gameInternalState = result.internalState;
+
+      for (const roomPlayer of room.players) {
+        emitPrivateState(io, room, roomPlayer);
+      }
+
+      emitRoomUpdate(io, room);
+      callback?.({ ok: true });
+    });
+
+    socket.on('room:return-to-lobby', ({ code }, callback) => {
+      const room = rooms.get(normalizeCode(code));
+      if (!room) {
+        callback?.({ error: 'Room not found' });
+        return;
+      }
+
+      const player = getPlayerBySocketId(room, socket.id);
+      if (!player) {
+        callback?.({ error: 'Player not found in room' });
+        return;
+      }
+
+      if (room.hostId !== player.id) {
+        callback?.({ error: 'Only the host can return the room to the lobby' });
+        return;
+      }
+
+      resetRoomToLobby(room);
       emitRoomUpdate(io, room);
       callback?.({ ok: true });
     });

@@ -2,3 +2,4 @@ node_modules
 client/dist
 npm-debug.log*
 .DS_Store
+server/data/word-cache.json

@@ -348,6 +348,22 @@ export function PlaySessionProvider({ children, game }) {
     [runRoomAction]
   );
 
+  const sendGameAction = useCallback(
+    async (code, type, payload = {}) => {
+      const normalizedCode = normalizeCode(code);
+      return runRoomAction(type, 'game:action', { code: normalizedCode, type, payload });
+    },
+    [runRoomAction]
+  );
+
+  const returnRoomToLobby = useCallback(
+    async (code) => {
+      const normalizedCode = normalizeCode(code);
+      return runRoomAction('return-to-lobby', 'room:return-to-lobby', { code: normalizedCode });
+    },
+    [runRoomAction]
+  );
+
   const currentPlayer = useMemo(
     () => roomState?.players.find((player) => player.id === playerId) ?? null,
     [playerId, roomState?.players]
@@ -371,7 +387,9 @@ export function PlaySessionProvider({ children, game }) {
       joinRoom,
       ensureRoom,
       setReady,
-      startGame
+      startGame,
+      sendGameAction,
+      returnRoomToLobby
     }),
     [
       connectionState,
@@ -386,7 +404,9 @@ export function PlaySessionProvider({ children, game }) {
       playerId,
       playerName,
       privateState,
+      returnRoomToLobby,
       roomState,
+      sendGameAction,
       setPlayerName,
       setReady,
       startGame
