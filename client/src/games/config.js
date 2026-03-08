@@ -17,17 +17,18 @@ export const games = [
   {
     id: 'whowhatwhere',
     name: 'WhoWhatWhere',
-    tagline: 'Fast clues, faster guesses.',
-    description: 'Race through prompt rounds by describing clearly and keeping the room moving.',
+    tagline: 'Articulate-style team rounds, built for phones.',
+    description: 'Split into teams, rotate the describer, and race the clock to land as many words as you can.',
     howToPlay: [
-      'Join the room and mark yourself ready before the host starts.',
-      'Players describe a hidden prompt while the room calls out guesses.',
-      'Track correct guesses, skips, and momentum as the round unfolds.'
+      'Join a team in the lobby, rename teams if you want, and get everyone ready.',
+      'One describer starts a timed turn while teammates guess out loud from their own phones or around the same device.',
+      'Each team gets one turn per round. Correct answers add points, and extra skips cost points.'
     ],
-    minPlayers: 2,
+    minPlayers: 4,
     supportsLocal: true,
-    lobbyFeatures: ['ready-check', 'invite-link', 'host-start'],
-    gameplayView: 'whowhatwhere'
+    lobbyFeatures: ['team-select', 'ready-check', 'invite-link', 'host-start'],
+    gameplayView: 'whowhatwhere',
+    teamBased: true
   },
   {
     id: 'drawnguess',

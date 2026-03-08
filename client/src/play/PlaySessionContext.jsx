@@ -340,6 +340,37 @@ export function PlaySessionProvider({ children, game }) {
     [runRoomAction]
   );
 
+  const assignTeam = useCallback(
+    async (code, teamId) => {
+      const normalizedCode = normalizeCode(code);
+      return runRoomAction('assign-team', 'room:assign-team', { code: normalizedCode, teamId });
+    },
+    [runRoomAction]
+  );
+
+  const updateTeamName = useCallback(
+    async (code, teamId, name) => {
+      const normalizedCode = normalizeCode(code);
+      return runRoomAction('update-team-name', 'room:update-team-name', {
+        code: normalizedCode,
+        teamId,
+        name
+      });
+    },
+    [runRoomAction]
+  );
+
+  const updateRoomSettings = useCallback(
+    async (code, settings) => {
+      const normalizedCode = normalizeCode(code);
+      return runRoomAction('update-settings', 'room:update-settings', {
+        code: normalizedCode,
+        settings
+      });
+    },
+    [runRoomAction]
+  );
+
   const startGame = useCallback(
     async (code) => {
       const normalizedCode = normalizeCode(code);
@@ -386,12 +417,16 @@ export function PlaySessionProvider({ children, game }) {
       createRoom,
       joinRoom,
       ensureRoom,
+      assignTeam,
+      updateTeamName,
+      updateRoomSettings,
       setReady,
       startGame,
       sendGameAction,
       returnRoomToLobby
     }),
     [
+      assignTeam,
       connectionState,
       createRoom,
       currentPlayer,
@@ -409,7 +444,9 @@ export function PlaySessionProvider({ children, game }) {
       sendGameAction,
       setPlayerName,
       setReady,
-      startGame
+      startGame,
+      updateRoomSettings,
+      updateTeamName
     ]
   );
 

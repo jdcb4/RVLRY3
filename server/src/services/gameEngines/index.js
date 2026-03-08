@@ -6,19 +6,48 @@ const GAME_WORD_TYPE = {
 
 const GAME_MIN_PLAYERS = {
   imposter: 2,
-  whowhatwhere: 2,
+  whowhatwhere: 4,
   drawnguess: 2
 };
+
+export const DEFAULT_WHOWHATWHERE_SETTINGS = {
+  turnDurationSeconds: 45,
+  totalRounds: 3,
+  freeSkips: 1,
+  skipPenalty: 1
+};
+
+export const DEFAULT_WHOWHATWHERE_TEAMS = [
+  { id: 'team-a', name: 'Team A', score: 0 },
+  { id: 'team-b', name: 'Team B', score: 0 }
+];
 
 const MAX_CLUE_LENGTH = 120;
 const MAX_GUESS_LENGTH = 100;
 const MAX_DRAWING_DATA_URL_LENGTH = 800_000;
+const WHOWHATWHERE_QUEUE_SIZE = 24;
+const WHOWHATWHERE_QUEUE_REFILL_THRESHOLD = 4;
+const WHOWHATWHERE_QUEUE_REFILL_COUNT = 8;
 
 const randomItem = (items) => items[Math.floor(Math.random() * items.length)];
 const buildPrivateState = (players, mapper) => new Map(players.map((player) => [player.id, mapper(player)]));
 const normalizeText = (value) => String(value ?? '').trim();
 const getPlayerIds = (players) => players.map((player) => player.id);
 const hasPlayer = (players, playerId) => players.some((player) => player.id === playerId);
+const sortPlayersBySeat = (players) => [...players].sort((left, right) => left.seat - right.seat);
+const cloneTeams = (teams = []) => teams.map((team) => ({ ...team }));
+
+const sanitizeWhoWhatWhereSettings = (settings = {}) => ({
+  turnDurationSeconds: Number.isFinite(settings.turnDurationSeconds) ? settings.turnDurationSeconds : DEFAULT_WHOWHATWHERE_SETTINGS.turnDurationSeconds,
+  totalRounds: Number.isFinite(settings.totalRounds) ? settings.totalRounds : DEFAULT_WHOWHATWHERE_SETTINGS.totalRounds,
+  freeSkips: Number.isFinite(settings.freeSkips) ? settings.freeSkips : DEFAULT_WHOWHATWHERE_SETTINGS.freeSkips,
+  skipPenalty: Number.isFinite(settings.skipPenalty) ? settings.skipPenalty : DEFAULT_WHOWHATWHERE_SETTINGS.skipPenalty
+});
+
+const getTeamMap = (teams = []) => new Map(teams.map((team) => [team.id, team]));
+const getTeamPlayers = (players, teamId) => sortPlayersBySeat(players.filter((player) => player.teamId === teamId));
+const nowIso = () => new Date().toISOString();
+const isPast = (timestamp) => new Date(timestamp).getTime() <= Date.now();
 
 const buildImposterPrivateState = (players, publicState, internalState) =>
   buildPrivateState(players, (player) => ({
@@ -30,13 +59,113 @@ const buildImposterPrivateState = (players, publicState, internalState) =>
     votedForPlayerId: internalState.votes[player.id] ?? null
   }));
 
-const buildWhoWhatWherePrivateState = (players, publicState, internalState) =>
-  buildPrivateState(players, (player) => ({
-    role: publicState.stage === 'turn' && publicState.activePlayerId === player.id ? 'describer' : 'guesser',
-    isActive: publicState.stage === 'turn' && publicState.activePlayerId === player.id,
-    canResolve: publicState.stage === 'turn' && publicState.activePlayerId === player.id,
-    word: publicState.stage === 'turn' && publicState.activePlayerId === player.id ? internalState.currentWord : null
-  }));
+const buildWhoWhatWhereTurnSnapshot = (activeTurn) => {
+  const currentWord = activeTurn.wordQueue[activeTurn.queueIndex] ?? null;
+
+  return {
+    startedAt: activeTurn.startedAt,
+    endsAt: activeTurn.endsAt,
+    durationSeconds: activeTurn.durationSeconds,
+    score: activeTurn.score,
+    correctCount: activeTurn.correctCount,
+    skippedCount: activeTurn.skippedCount,
+    freeSkipsRemaining: activeTurn.freeSkipsRemaining,
+    currentWordLength: currentWord?.length ?? 0,
+    wordHistory: activeTurn.wordHistory
+  };
+};
+
+const getWhoWhatWhereActiveTeamId = (internalState) => internalState.teamOrder[internalState.teamIndex] ?? null;
+
+const getWhoWhatWhereActiveContext = (players, teams, internalState) => {
+  const activeTeamId = getWhoWhatWhereActiveTeamId(internalState);
+  const activeTeam = teams.find((team) => team.id === activeTeamId) ?? null;
+  const activeTeamPlayers = getTeamPlayers(players, activeTeamId);
+  const describerIndex = activeTeamPlayers.length === 0 ? 0 : (internalState.describerIndexes[activeTeamId] ?? 0) % activeTeamPlayers.length;
+  const activeDescriber = activeTeamPlayers[describerIndex] ?? null;
+
+  return {
+    activeTeamId,
+    activeTeam,
+    activeTeamPlayers,
+    activeDescriberId: activeDescriber?.id ?? null,
+    activeDescriberName: activeDescriber?.name ?? 'Waiting'
+  };
+};
+
+const buildWhoWhatWhereReadyPublicState = ({ players, teams, internalState, lastTurnSummary = null }) => {
+  const activeContext = getWhoWhatWhereActiveContext(players, teams, internalState);
+
+  return {
+    status: 'round-active',
+    stage: 'ready',
+    roundNumber: internalState.roundNumber,
+    totalRounds: internalState.settings.totalRounds,
+    activeTeamId: activeContext.activeTeamId,
+    activeTeamName: activeContext.activeTeam?.name ?? 'Team',
+    activeDescriberId: activeContext.activeDescriberId,
+    activeDescriberName: activeContext.activeDescriberName,
+    turn: null,
+    lastTurnSummary,
+    results: null
+  };
+};
+
+const buildWhoWhatWhereGameOverPublicState = ({ teams, internalState, lastTurnSummary = null }) => {
+  const leaderboard = cloneTeams(teams)
+    .sort((left, right) => right.score - left.score)
+    .map((team) => ({
+      teamId: team.id,
+      teamName: team.name,
+      score: team.score
+    }));
+  const topScore = leaderboard[0]?.score ?? 0;
+  const winnerTeamIds = leaderboard.filter((team) => team.score === topScore).map((team) => team.teamId);
+
+  return {
+    status: 'game-complete',
+    stage: 'game-over',
+    roundNumber: internalState.settings.totalRounds,
+    totalRounds: internalState.settings.totalRounds,
+    activeTeamId: null,
+    activeTeamName: null,
+    activeDescriberId: null,
+    activeDescriberName: null,
+    turn: null,
+    lastTurnSummary,
+    results: {
+      leaderboard,
+      winnerTeamIds,
+      isTie: winnerTeamIds.length > 1
+    }
+  };
+};
+
+const buildWhoWhatWherePrivateState = (players, publicState, internalState, teams) => {
+  const teamMap = getTeamMap(teams);
+  const activeTurn = internalState.activeTurn;
+  const currentWord = activeTurn ? activeTurn.wordQueue[activeTurn.queueIndex] ?? null : null;
+
+  return buildPrivateState(players, (player) => {
+    const playerTeam = teamMap.get(player.teamId) ?? null;
+    const isDescriber = player.id === publicState.activeDescriberId;
+    const isActiveTeam = player.teamId && player.teamId === publicState.activeTeamId;
+    const role = !player.teamId ? 'unassigned' : isDescriber ? 'describer' : isActiveTeam ? 'guesser' : 'spectator';
+
+    return {
+      teamId: player.teamId ?? null,
+      teamName: playerTeam?.name ?? null,
+      role,
+      isActiveTeam,
+      isDescriber,
+      canStartTurn: publicState.stage === 'ready' && isDescriber,
+      canMarkCorrect: publicState.stage === 'turn' && isDescriber,
+      canSkip: publicState.stage === 'turn' && isDescriber,
+      canEndTurn: publicState.stage === 'turn' && isDescriber,
+      word: publicState.stage === 'turn' && isDescriber ? currentWord : null
+    };
+  });
+};
 
 const buildDrawNGuessPrivateState = (players, publicState, internalState) => {
   if (publicState.stage === 'results') {
@@ -110,31 +239,59 @@ const buildImposterState = ({ players, word }) => {
   };
 };
 
-const buildWhoWhatWhereState = ({ players, word }) => {
-  const turnOrder = getPlayerIds(players);
-  const publicState = {
-    status: 'round-active',
-    stage: 'turn',
-    activePlayerId: turnOrder[0] ?? null,
-    turnNumber: 1,
-    totalTurns: turnOrder.length,
-    currentWordLength: word.length,
-    guessed: 0,
-    skipped: 0,
-    turnSummary: [],
-    results: null
-  };
+const collectWhoWhatWhereWordQueue = (wordStore, count) => {
+  const queue = [];
+  const seen = new Set();
+  let attempts = 0;
+
+  while (queue.length < count && attempts < count * 12) {
+    attempts += 1;
+    const nextWord = wordStore.getRandomWord(GAME_WORD_TYPE.whowhatwhere);
+    if (!nextWord) {
+      break;
+    }
+
+    const normalized = normalizeText(nextWord);
+    if (!normalized) {
+      continue;
+    }
+
+    if (seen.has(normalized) && attempts < count * 8) {
+      continue;
+    }
+
+    seen.add(normalized);
+    queue.push(normalized);
+  }
+
+  return queue;
+};
+
+const buildWhoWhatWhereState = ({ players, teams, settings }) => {
+  const sanitizedSettings = sanitizeWhoWhatWhereSettings(settings);
+  const nextTeams = cloneTeams(teams).map((team) => ({ ...team, score: 0 }));
+  const teamOrder = nextTeams.map((team) => team.id);
+  const describerIndexes = Object.fromEntries(teamOrder.map((teamId) => [teamId, 0]));
   const internalState = {
-    turnOrder,
-    turnIndex: 0,
-    currentWord: word,
-    turnResults: []
+    settings: sanitizedSettings,
+    teamOrder,
+    teamIndex: 0,
+    roundNumber: 1,
+    describerIndexes,
+    activeTurn: null
   };
+  const publicState = buildWhoWhatWhereReadyPublicState({
+    players,
+    teams: nextTeams,
+    internalState,
+    lastTurnSummary: null
+  });
 
   return {
     publicState,
-    privateState: buildWhoWhatWherePrivateState(players, publicState, internalState),
-    internalState
+    privateState: buildWhoWhatWherePrivateState(players, publicState, internalState, nextTeams),
+    internalState,
+    teams: nextTeams
   };
 };
 
@@ -303,91 +460,255 @@ function applyImposterAction({ players, playerId, action, publicState, internalS
   return { error: 'Unknown action for Imposter' };
 }
 
-function applyWhoWhatWhereAction({ players, playerId, action, publicState, internalState, wordStore }) {
-  if (!['mark-guessed', 'mark-skipped'].includes(action.type)) {
-    return { error: 'Unknown action for WhoWhatWhere' };
+function finishWhoWhatWhereTurn({ players, teams, internalState }) {
+  const activeContext = getWhoWhatWhereActiveContext(players, teams, internalState);
+  const activeTurn = internalState.activeTurn;
+
+  if (!activeTurn || !activeContext.activeTeamId) {
+    return { error: 'The turn is not active right now' };
   }
 
-  if (publicState.stage !== 'turn') {
-    return { error: 'The round has already ended' };
-  }
+  const nextTeams = cloneTeams(teams).map((team) =>
+    team.id === activeContext.activeTeamId
+      ? { ...team, score: team.score + activeTurn.score }
+      : team
+  );
 
-  if (publicState.activePlayerId !== playerId) {
-    return { error: 'Only the active describer can resolve this turn' };
-  }
-
-  const didGuess = action.type === 'mark-guessed';
-  const nextTurnIndex = internalState.turnIndex + 1;
-  const turnResult = {
-    playerId,
-    outcome: didGuess ? 'guessed' : 'skipped',
-    word: internalState.currentWord
+  const lastTurnSummary = {
+    teamId: activeContext.activeTeamId,
+    teamName: activeContext.activeTeam?.name ?? 'Team',
+    describerId: activeContext.activeDescriberId,
+    describerName: activeContext.activeDescriberName,
+    scoreDelta: activeTurn.score,
+    correctCount: activeTurn.correctCount,
+    skippedCount: activeTurn.skippedCount,
+    freeSkipsRemaining: activeTurn.freeSkipsRemaining,
+    words: activeTurn.wordHistory
   };
-  const guessed = publicState.guessed + (didGuess ? 1 : 0);
-  const skipped = publicState.skipped + (didGuess ? 0 : 1);
-  const turnSummary = [
-    ...publicState.turnSummary,
-    {
-      playerId,
-      outcome: turnResult.outcome,
-      wordLength: internalState.currentWord.length
-    }
-  ];
-  const turnResults = [...internalState.turnResults, turnResult];
 
-  if (nextTurnIndex >= internalState.turnOrder.length) {
-    const nextPublicState = {
-      ...publicState,
-      status: 'round-complete',
-      stage: 'results',
-      guessed,
-      skipped,
-      turnSummary,
-      results: {
-        guessed,
-        skipped,
-        turns: turnResults
-      },
-      activePlayerId: null
+  const currentTeamPlayers = activeContext.activeTeamPlayers;
+  const currentDescriberIndex = internalState.describerIndexes[activeContext.activeTeamId] ?? 0;
+  const nextDescriberIndexes = {
+    ...internalState.describerIndexes,
+    [activeContext.activeTeamId]:
+      currentTeamPlayers.length === 0 ? 0 : (currentDescriberIndex + 1) % currentTeamPlayers.length
+  };
+
+  let nextTeamIndex = internalState.teamIndex + 1;
+  let nextRoundNumber = internalState.roundNumber;
+
+  if (nextTeamIndex >= internalState.teamOrder.length) {
+    nextTeamIndex = 0;
+    nextRoundNumber += 1;
+  }
+
+  const nextInternalState = {
+    ...internalState,
+    describerIndexes: nextDescriberIndexes,
+    teamIndex: nextTeamIndex,
+    roundNumber: nextRoundNumber,
+    activeTurn: null
+  };
+
+  if (nextRoundNumber > internalState.settings.totalRounds) {
+    const nextPublicState = buildWhoWhatWhereGameOverPublicState({
+      teams: nextTeams,
+      internalState: nextInternalState,
+      lastTurnSummary
+    });
+
+    return {
+      publicState: nextPublicState,
+      privateState: buildWhoWhatWherePrivateState(players, nextPublicState, nextInternalState, nextTeams),
+      internalState: nextInternalState,
+      teams: nextTeams
+    };
+  }
+
+  const nextPublicState = buildWhoWhatWhereReadyPublicState({
+    players,
+    teams: nextTeams,
+    internalState: nextInternalState,
+    lastTurnSummary
+  });
+
+  return {
+    publicState: nextPublicState,
+    privateState: buildWhoWhatWherePrivateState(players, nextPublicState, nextInternalState, nextTeams),
+    internalState: nextInternalState,
+    teams: nextTeams
+  };
+}
+
+function applyWhoWhatWhereAction({ players, teams, playerId, action, publicState, internalState, wordStore }) {
+  const safeTeams = cloneTeams(teams);
+
+  if (action.type === 'start-turn') {
+    const activeContext = getWhoWhatWhereActiveContext(players, safeTeams, internalState);
+
+    if (publicState.stage !== 'ready') {
+      return { error: 'The room is already in a live turn' };
+    }
+
+    if (playerId !== activeContext.activeDescriberId) {
+      return { error: 'Only the active describer can start this turn' };
+    }
+
+    const wordQueue = collectWhoWhatWhereWordQueue(wordStore, WHOWHATWHERE_QUEUE_SIZE);
+    if (wordQueue.length === 0) {
+      return { error: 'Unable to load words for this turn right now' };
+    }
+
+    const startedAt = Date.now();
+    const activeTurn = {
+      startedAt: new Date(startedAt).toISOString(),
+      endsAt: new Date(startedAt + internalState.settings.turnDurationSeconds * 1000).toISOString(),
+      durationSeconds: internalState.settings.turnDurationSeconds,
+      wordQueue,
+      queueIndex: 0,
+      score: 0,
+      correctCount: 0,
+      skippedCount: 0,
+      freeSkipsRemaining: internalState.settings.freeSkips,
+      wordHistory: []
     };
     const nextInternalState = {
       ...internalState,
-      turnIndex: nextTurnIndex,
-      turnResults
+      activeTurn
+    };
+    const nextPublicState = {
+      ...publicState,
+      stage: 'turn',
+      turn: buildWhoWhatWhereTurnSnapshot(activeTurn)
     };
 
     return {
       publicState: nextPublicState,
-      privateState: buildWhoWhatWherePrivateState(players, nextPublicState, nextInternalState),
-      internalState: nextInternalState
+      privateState: buildWhoWhatWherePrivateState(players, nextPublicState, nextInternalState, safeTeams),
+      internalState: nextInternalState,
+      teams: safeTeams
     };
   }
 
-  const nextWord = wordStore.getRandomWord(GAME_WORD_TYPE.whowhatwhere);
-  if (!nextWord) {
-    return { error: 'Unable to load the next prompt yet' };
+  if (action.type === 'end-turn') {
+    const activeContext = getWhoWhatWhereActiveContext(players, safeTeams, internalState);
+    const activeTurn = internalState.activeTurn;
+
+    if (publicState.stage !== 'turn' || !activeTurn) {
+      return { error: 'There is no active turn to end' };
+    }
+
+    const isExpired = isPast(activeTurn.endsAt);
+    if (playerId !== activeContext.activeDescriberId && !isExpired) {
+      return { error: 'Only the active describer can end the turn early' };
+    }
+
+    return finishWhoWhatWhereTurn({
+      players,
+      teams: safeTeams,
+      publicState,
+      internalState
+    });
   }
 
-  const nextPublicState = {
-    ...publicState,
-    guessed,
-    skipped,
-    turnSummary,
-    activePlayerId: internalState.turnOrder[nextTurnIndex],
-    turnNumber: nextTurnIndex + 1,
-    currentWordLength: nextWord.length
+  if (!['mark-correct', 'skip-word'].includes(action.type)) {
+    return { error: 'Unknown action for WhoWhatWhere' };
+  }
+
+  if (publicState.stage !== 'turn' || !internalState.activeTurn) {
+    return { error: 'The round is not in an active turn' };
+  }
+
+  const activeContext = getWhoWhatWhereActiveContext(players, safeTeams, internalState);
+  if (playerId !== activeContext.activeDescriberId) {
+    return { error: 'Only the active describer can control the turn' };
+  }
+
+  if (isPast(internalState.activeTurn.endsAt)) {
+    return finishWhoWhatWhereTurn({
+      players,
+      teams: safeTeams,
+      publicState,
+      internalState
+    });
+  }
+
+  const currentWord = internalState.activeTurn.wordQueue[internalState.activeTurn.queueIndex];
+  if (!currentWord) {
+    return finishWhoWhatWhereTurn({
+      players,
+      teams: safeTeams,
+      publicState,
+      internalState
+    });
+  }
+
+  const nextActiveTurn = {
+    ...internalState.activeTurn,
+    wordHistory: [...internalState.activeTurn.wordHistory]
   };
+
+  if (action.type === 'mark-correct') {
+    nextActiveTurn.score += 1;
+    nextActiveTurn.correctCount += 1;
+    nextActiveTurn.wordHistory.push({
+      word: currentWord,
+      status: 'correct',
+      timestamp: nowIso()
+    });
+  }
+
+  if (action.type === 'skip-word') {
+    nextActiveTurn.skippedCount += 1;
+    nextActiveTurn.wordHistory.push({
+      word: currentWord,
+      status: 'skipped',
+      timestamp: nowIso()
+    });
+
+    if (nextActiveTurn.freeSkipsRemaining > 0) {
+      nextActiveTurn.freeSkipsRemaining -= 1;
+    } else {
+      nextActiveTurn.score -= internalState.settings.skipPenalty;
+    }
+  }
+
+  nextActiveTurn.queueIndex += 1;
+
+  const remainingWords = nextActiveTurn.wordQueue.length - nextActiveTurn.queueIndex;
+  if (remainingWords <= WHOWHATWHERE_QUEUE_REFILL_THRESHOLD) {
+    nextActiveTurn.wordQueue = [
+      ...nextActiveTurn.wordQueue,
+      ...collectWhoWhatWhereWordQueue(wordStore, WHOWHATWHERE_QUEUE_REFILL_COUNT)
+    ];
+  }
+
+  if (!nextActiveTurn.wordQueue[nextActiveTurn.queueIndex]) {
+    return finishWhoWhatWhereTurn({
+      players,
+      teams: safeTeams,
+      publicState,
+      internalState: {
+        ...internalState,
+        activeTurn: nextActiveTurn
+      }
+    });
+  }
+
   const nextInternalState = {
     ...internalState,
-    turnIndex: nextTurnIndex,
-    currentWord: nextWord,
-    turnResults
+    activeTurn: nextActiveTurn
+  };
+  const nextPublicState = {
+    ...publicState,
+    turn: buildWhoWhatWhereTurnSnapshot(nextActiveTurn)
   };
 
   return {
     publicState: nextPublicState,
-    privateState: buildWhoWhatWherePrivateState(players, nextPublicState, nextInternalState),
-    internalState: nextInternalState
+    privateState: buildWhoWhatWherePrivateState(players, nextPublicState, nextInternalState, safeTeams),
+    internalState: nextInternalState,
+    teams: safeTeams
   };
 }
 
@@ -499,7 +820,7 @@ export function getMinPlayersForGame(gameId) {
   return GAME_MIN_PLAYERS[gameId] ?? 2;
 }
 
-export function buildGameStartState({ gameId, players, word }) {
+export function buildGameStartState({ gameId, players, word, teams = [], settings = {}, wordStore }) {
   const builder = GAME_BUILDERS[gameId];
   if (!builder) {
     return {
@@ -509,17 +830,29 @@ export function buildGameStartState({ gameId, players, word }) {
     };
   }
 
-  return builder({ players, word });
+  return builder({ players, word, teams, settings, wordStore });
 }
 
-export function applyGameAction({ gameId, players, playerId, action, publicState, privateState, internalState, wordStore }) {
+export function applyGameAction({
+  gameId,
+  players,
+  teams = [],
+  playerId,
+  action,
+  publicState,
+  privateState,
+  internalState,
+  wordStore
+}) {
   const handler = GAME_ACTION_HANDLERS[gameId];
   if (!handler) {
     return { error: 'This game is not configured for gameplay yet' };
   }
 
   return handler({
+    gameId,
     players,
+    teams,
     playerId,
     action,
     publicState,

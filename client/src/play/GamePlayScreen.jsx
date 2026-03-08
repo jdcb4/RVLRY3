@@ -2,6 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { usePlaySession } from './PlaySessionContext';
 
+const EMPTY_TEAMS = [];
+
 function ResultsActions({ isHost, roomCode, onReturnToLobby, pendingAction }) {
   if (!isHost) {
     return <p className="helper-text">The host can return the room to the lobby for another round.</p>;
@@ -43,6 +45,29 @@ function DisclosurePanel({ title, description, summary, defaultOpen = false, chi
     </details>
   );
 }
+
+const formatCountdown = (totalSeconds) => {
+  const safeSeconds = Math.max(0, totalSeconds);
+  const minutes = Math.floor(safeSeconds / 60);
+  const seconds = safeSeconds % 60;
+  return `${minutes}:${String(seconds).padStart(2, '0')}`;
+};
+
+const getCountdownSeconds = (endsAt) => {
+  if (!endsAt) {
+    return 0;
+  }
+
+  return Math.max(0, Math.ceil((new Date(endsAt).getTime() - Date.now()) / 1000));
+};
+
+const getTeamById = (teams, teamId) => teams.find((team) => team.id === teamId) ?? null;
+
+const buildTeamRosters = (teams, players) =>
+  (teams ?? []).map((team) => ({
+    ...team,
+    players: players.filter((player) => player.teamId === team.id)
+  }));
 
 function GameplayPlayerList({ players, playerId, hostId, getStatus }) {
   return (
@@ -243,7 +268,6 @@ function WhoWhatWherePlay({
   roomCode,
   roomState,
   privateState,
-  playersById,
   playerId,
   isHost,
   pendingAction,
@@ -253,116 +277,352 @@ function WhoWhatWherePlay({
   const publicState = roomState.gamePublicState;
   const stage = publicState?.stage;
   const results = publicState?.results;
-  const activePlayerName = playersById.get(publicState.activePlayerId)?.name ?? 'Waiting';
+  const turn = publicState?.turn;
+  const teams = roomState.teams ?? EMPTY_TEAMS;
+  const teamRosters = useMemo(() => buildTeamRosters(teams, roomState.players), [roomState.players, teams]);
+  const activeTeam = getTeamById(teams, publicState.activeTeamId);
+  const myTeam = getTeamById(teams, privateState?.teamId);
+  const [secondsRemaining, setSecondsRemaining] = useState(() => getCountdownSeconds(turn?.endsAt));
+  const autoEndRef = useRef('');
+
+  useEffect(() => {
+    if (stage !== 'turn' || !turn?.endsAt) {
+      setSecondsRemaining(0);
+      autoEndRef.current = '';
+      return undefined;
+    }
+
+    const tick = () => {
+      const remaining = getCountdownSeconds(turn.endsAt);
+      setSecondsRemaining(remaining);
+
+      const canForceSync = playerId === publicState.activeDescriberId || isHost;
+      if (remaining <= 0 && canForceSync && autoEndRef.current !== turn.endsAt) {
+        autoEndRef.current = turn.endsAt;
+        sendGameAction(roomCode, 'end-turn');
+      }
+    };
+
+    tick();
+    const intervalId = window.setInterval(tick, 250);
+    return () => window.clearInterval(intervalId);
+  }, [
+    isHost,
+    playerId,
+    publicState.activeDescriberId,
+    roomCode,
+    sendGameAction,
+    stage,
+    turn?.endsAt
+  ]);
+
+  const renderReadyState = () => {
+    if (privateState?.canStartTurn) {
+      return (
+        <div className="field-stack">
+          <div className="role-card">
+            <span className="helper-text">Your turn to describe</span>
+            <strong className="role-card__title">{activeTeam?.name ?? 'Team'}</strong>
+            <span className="role-card__body">
+              Gather your team, then start the clock when everyone is ready to listen and guess.
+            </span>
+          </div>
+          <button disabled={pendingAction === 'start-turn'} onClick={() => sendGameAction(roomCode, 'start-turn')}>
+            Start turn
+          </button>
+        </div>
+      );
+    }
+
+    if (privateState?.isActiveTeam) {
+      return (
+        <div className="notice-card">
+          <strong>{publicState.activeDescriberName} is about to describe for {activeTeam?.name ?? 'your team'}.</strong>
+          <p>Stay on this screen, listen out loud, and call guesses as soon as the turn starts.</p>
+        </div>
+      );
+    }
+
+    return (
+      <div className="notice-card">
+        <strong>{activeTeam?.name ?? 'The other team'} is up next.</strong>
+        <p>
+          {publicState.activeDescriberName} is the describer. You are spectating until it is {myTeam?.name ?? 'your'}
+          {' '}team&apos;s turn.
+        </p>
+      </div>
+    );
+  };
+
+  const renderTurnState = () => {
+    if (privateState?.isDescriber) {
+      return (
+        <div className="field-stack">
+          <div className="turn-hero">
+            <div className="turn-hero__clock">
+              <span className="helper-text">Time left</span>
+              <strong>{formatCountdown(secondsRemaining)}</strong>
+            </div>
+            <div className="turn-hero__score">
+              <span className="helper-text">Turn score</span>
+              <strong>{turn?.score ?? 0}</strong>
+            </div>
+          </div>
+
+          <div className="role-card">
+            <span className="helper-text">Describe this word</span>
+            <strong className="role-card__title">{privateState.word ?? 'Loading next word'}</strong>
+            <span className="role-card__body">
+              Speak only. No part words, no rhymes, no spelling. Tap the result as soon as your team lands it.
+            </span>
+          </div>
+
+          <SummaryChips
+            items={[
+              { label: 'Correct', value: turn?.correctCount ?? 0 },
+              { label: 'Skipped', value: turn?.skippedCount ?? 0 },
+              { label: 'Free skips', value: turn?.freeSkipsRemaining ?? 0 }
+            ]}
+          />
+
+          <div className="actions actions--stretch">
+            <button disabled={pendingAction === 'mark-correct'} onClick={() => sendGameAction(roomCode, 'mark-correct')}>
+              Correct
+            </button>
+            <button
+              className="secondary-action"
+              disabled={pendingAction === 'skip-word'}
+              onClick={() => sendGameAction(roomCode, 'skip-word')}
+            >
+              Skip
+            </button>
+            <button
+              className="secondary-action"
+              disabled={pendingAction === 'end-turn'}
+              onClick={() => sendGameAction(roomCode, 'end-turn')}
+            >
+              End turn
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    if (privateState?.isActiveTeam) {
+      return (
+        <div className="field-stack">
+          <div className="turn-hero">
+            <div className="turn-hero__clock">
+              <span className="helper-text">Time left</span>
+              <strong>{formatCountdown(secondsRemaining)}</strong>
+            </div>
+            <div className="turn-hero__score">
+              <span className="helper-text">Team turn</span>
+              <strong>{turn?.score ?? 0}</strong>
+            </div>
+          </div>
+
+          <div className="notice-card">
+            <strong>{publicState.activeDescriberName} is describing for {activeTeam?.name ?? 'your team'}.</strong>
+            <p>Guess out loud. Only the describer sees the word and controls the round.</p>
+          </div>
+
+          <SummaryChips
+            items={[
+              { label: 'Correct', value: turn?.correctCount ?? 0 },
+              { label: 'Skipped', value: turn?.skippedCount ?? 0 },
+              { label: 'Free skips', value: turn?.freeSkipsRemaining ?? 0 }
+            ]}
+          />
+        </div>
+      );
+    }
+
+    return (
+      <div className="field-stack">
+        <div className="turn-hero">
+          <div className="turn-hero__clock">
+            <span className="helper-text">Time left</span>
+            <strong>{formatCountdown(secondsRemaining)}</strong>
+          </div>
+          <div className="turn-hero__score">
+            <span className="helper-text">Their turn</span>
+            <strong>{turn?.score ?? 0}</strong>
+          </div>
+        </div>
+
+        <div className="notice-card">
+          <strong>{activeTeam?.name ?? 'The other team'} is live.</strong>
+          <p>Watch the scoreboard and wait for the handoff to your team. The current word stays hidden from spectators.</p>
+        </div>
+      </div>
+    );
+  };
+
+  const renderGameOverState = () => (
+    <div className="field-stack">
+      <div className="role-card">
+        <span className="helper-text">Match result</span>
+        <strong className="role-card__title">
+          {results?.isTie
+            ? 'It\'s a tie'
+            : `${getTeamById(teams, results?.winnerTeamIds?.[0])?.name ?? 'Winner'} win${results?.winnerTeamIds?.length === 1 ? 's' : ''}`}
+        </strong>
+        <span className="role-card__body">
+          {results?.isTie
+            ? 'Two teams finished level on points.'
+            : 'All rounds are complete and the final leaderboard is locked in.'}
+        </span>
+      </div>
+
+      <ul className="player-list">
+        {(results?.leaderboard ?? []).map((entry) => (
+          <li key={entry.teamId} className="player-row player-row--compact">
+            <div className="player-row__identity">
+              <span className="player-row__name">{entry.teamName}</span>
+              <span className="helper-text">
+                {(results?.winnerTeamIds ?? []).includes(entry.teamId) ? 'Top score' : 'Final standing'}
+              </span>
+            </div>
+            <span className={(results?.winnerTeamIds ?? []).includes(entry.teamId) ? 'badge badge--ready' : 'badge'}>
+              {entry.score} pts
+            </span>
+          </li>
+        ))}
+      </ul>
+
+      <ResultsActions
+        isHost={isHost}
+        roomCode={roomCode}
+        onReturnToLobby={returnRoomToLobby}
+        pendingAction={pendingAction}
+      />
+    </div>
+  );
 
   return (
     <div className="gameplay-stack">
       <section className="panel panel--hero panel--stacked gameplay-primary">
         <div className="panel-heading">
-          <p className="status-pill">{stage === 'turn' ? 'Live turn' : 'Results'}</p>
-          <h2>{privateState?.isActive ? 'Your prompt' : 'Room focus'}</h2>
-          <p>Keep the active describer in control while the rest of the room stays oriented.</p>
+          <p className="status-pill">
+            {stage === 'ready' ? 'Get ready' : stage === 'turn' ? 'Live turn' : 'Match complete'}
+          </p>
+          <h2>
+            {stage === 'ready'
+              ? 'Next team up'
+              : stage === 'turn'
+                ? privateState?.isDescriber
+                  ? 'Describe and drive the turn'
+                  : privateState?.isActiveTeam
+                    ? 'Guess with your team'
+                    : 'Spectate the turn'
+                : 'Final leaderboard'}
+          </h2>
+          <p>Each phone shows only what that player needs: describe, guess, spectate, or review the result.</p>
         </div>
 
         <SummaryChips
           items={[
-            { label: 'Describer', value: activePlayerName },
+            { label: 'Round', value: `${publicState.roundNumber} / ${publicState.totalRounds}` },
+            { label: 'Team', value: activeTeam?.name ?? 'Waiting' },
+            { label: 'Describer', value: publicState.activeDescriberName ?? 'Waiting' },
             stage === 'turn'
-              ? { label: 'Turn', value: `${publicState.turnNumber} / ${publicState.totalTurns}` }
-              : { label: 'Turns', value: publicState.turnSummary.length },
-            { label: 'Guessed', value: publicState.guessed },
-            { label: 'Skipped', value: publicState.skipped }
+              ? { label: 'Score', value: turn?.score ?? 0 }
+              : { label: 'Your team', value: myTeam?.name ?? 'Not assigned' }
           ]}
         />
 
-        {privateState?.isActive ? (
-          <div className="role-card">
-            <span className="helper-text">Describe this prompt</span>
-            <strong className="role-card__title">{privateState.word}</strong>
-            <span className="role-card__body">Speak clearly without saying the answer itself.</span>
-          </div>
-        ) : (
-          <div className="notice-card">
-            <strong>{activePlayerName} is live</strong>
-            <p>
-              {stage === 'turn'
-                ? `${activePlayerName} is describing a ${publicState.currentWordLength}-letter word.`
-                : 'The round has finished and the full prompt log is ready below.'}
-            </p>
-          </div>
-        )}
-
-        {privateState?.isActive && stage === 'turn' && (
-          <div className="actions actions--stretch">
-            <button disabled={pendingAction === 'mark-guessed'} onClick={() => sendGameAction(roomCode, 'mark-guessed')}>
-              Mark guessed
-            </button>
-            <button
-              className="secondary-action"
-              disabled={pendingAction === 'mark-skipped'}
-              onClick={() => sendGameAction(roomCode, 'mark-skipped')}
-            >
-              Skip word
-            </button>
-          </div>
-        )}
-
-        {stage === 'results' && (
-          <ResultsActions
-            isHost={isHost}
-            roomCode={roomCode}
-            onReturnToLobby={returnRoomToLobby}
-            pendingAction={pendingAction}
-          />
-        )}
+        {stage === 'ready' && renderReadyState()}
+        {stage === 'turn' && renderTurnState()}
+        {stage === 'game-over' && renderGameOverState()}
       </section>
 
       <DisclosurePanel
-        title={stage === 'results' ? 'Resolved prompts' : 'Turn summary'}
-        description={stage === 'results' ? 'Every completed prompt from the round.' : 'Recent turn outcomes so the room can stay in sync.'}
-        summary={`${publicState.turnSummary.length} logged`}
-        defaultOpen={stage === 'results'}
+        title="Scoreboard"
+        description="Keep team scores visible without pushing the active controls off-screen."
+        summary={`${teamRosters.length} teams`}
+        defaultOpen
       >
-        {stage === 'results' && results ? (
+        <ul className="player-list">
+          {teamRosters.map((team) => (
+            <li key={team.id} className="player-row player-row--compact">
+              <div className="player-row__identity">
+                <span className="player-row__name">{team.name}</span>
+                <span className="helper-text">
+                  {team.players.map((player) => player.name).join(', ') || 'No players'}
+                </span>
+              </div>
+              <span className={team.id === publicState.activeTeamId && stage !== 'game-over' ? 'badge badge--ready' : 'badge'}>
+                {team.score} pts
+              </span>
+            </li>
+          ))}
+        </ul>
+      </DisclosurePanel>
+
+      <DisclosurePanel
+        title={stage === 'game-over' ? 'Turn recap' : 'Latest turn'}
+        description={
+          stage === 'game-over'
+            ? 'The final team scores are set. This panel keeps the last turn context handy.'
+            : 'Use this between turns to confirm what just happened before the next team starts.'
+        }
+        summary={publicState.lastTurnSummary ? `${publicState.lastTurnSummary.scoreDelta} pts` : 'No turns yet'}
+        defaultOpen={stage !== 'turn'}
+      >
+        {publicState.lastTurnSummary ? (
           <ul className="player-list">
-            {results.turns.map((turn, index) => (
-              <li key={`${turn.playerId}-${turn.word}-${index}`} className="player-row player-row--compact">
+            {publicState.lastTurnSummary.words.map((entry, index) => (
+              <li key={`${entry.word}-${index}`} className="player-row player-row--compact">
                 <div className="player-row__identity">
-                  <span className="player-row__name">{playersById.get(turn.playerId)?.name ?? 'Player'}</span>
-                  <span className="helper-text">{turn.word}</span>
+                  <span className="player-row__name">{entry.word}</span>
+                  <span className="helper-text">
+                    {publicState.lastTurnSummary.teamName} / {publicState.lastTurnSummary.describerName}
+                  </span>
                 </div>
-                <span className={turn.outcome === 'guessed' ? 'badge badge--ready' : 'badge'}>{turn.outcome}</span>
-              </li>
-            ))}
-          </ul>
-        ) : publicState.turnSummary.length > 0 ? (
-          <ul className="player-list">
-            {publicState.turnSummary.map((entry, index) => (
-              <li key={`${entry.playerId}-${entry.outcome}-${index}`} className="player-row player-row--compact">
-                <div className="player-row__identity">
-                  <span className="player-row__name">{playersById.get(entry.playerId)?.name ?? 'Player'}</span>
-                  <span className="helper-text">{entry.wordLength}-letter prompt</span>
-                </div>
-                <span className={entry.outcome === 'guessed' ? 'badge badge--ready' : 'badge'}>
-                  {entry.outcome === 'guessed' ? 'Guessed' : 'Skipped'}
+                <span className={entry.status === 'correct' ? 'badge badge--ready' : 'badge'}>
+                  {entry.status === 'correct' ? 'Correct' : 'Skipped'}
                 </span>
               </li>
             ))}
           </ul>
         ) : (
-          <p className="helper-text">Each resolved prompt will be recorded here.</p>
+          <p className="helper-text">Once the first turn ends, the resolved words and score change will appear here.</p>
         )}
       </DisclosurePanel>
 
-      <DisclosurePanel title="Players" description="Active turn ownership without crowding the main prompt area." summary={`${roomState.players.length} connected`}>
+      <DisclosurePanel title="Players" description="Everyone can confirm roles, teams, and turn ownership without cluttering the main view." summary={`${roomState.players.length} connected`}>
         <GameplayPlayerList
           players={roomState.players}
           playerId={playerId}
           hostId={roomState.hostId}
-          getStatus={(player) => ({
-            text: player.id === publicState.activePlayerId && stage === 'turn' ? 'Active' : 'Waiting',
-            tone: player.id === publicState.activePlayerId && stage === 'turn' ? 'ready' : 'default'
-          })}
+          getStatus={(player) => {
+            if (stage === 'game-over') {
+              return {
+                text: getTeamById(teams, player.teamId)?.name ?? 'Player',
+                tone: 'default'
+              };
+            }
+
+            if (player.id === publicState.activeDescriberId) {
+              return {
+                text: stage === 'ready' ? 'Up next' : 'Describing',
+                tone: 'ready'
+              };
+            }
+
+            if (player.teamId === publicState.activeTeamId) {
+              return {
+                text: stage === 'ready' ? 'On deck' : 'Guessing',
+                tone: 'default'
+              };
+            }
+
+            return {
+              text: player.teamId ? 'Spectating' : 'Unassigned',
+              tone: 'default'
+            };
+          }}
         />
       </DisclosurePanel>
     </div>
