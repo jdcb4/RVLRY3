@@ -17,6 +17,7 @@ const __dirname = path.dirname(__filename);
 const DEFAULT_CACHE_PATH = path.resolve(__dirname, '../../data/word-cache.json');
 
 export function createWordStore({ cacheFilePath = DEFAULT_CACHE_PATH } = {}) {
+  const recordsByType = new Map();
   const wordsByType = new Map();
   let lastSyncAt = null;
   let lastCacheLoadAt = null;
@@ -24,7 +25,7 @@ export function createWordStore({ cacheFilePath = DEFAULT_CACHE_PATH } = {}) {
   const persistCache = async () => {
     const payload = {
       lastSyncAt,
-      wordsByType: Object.fromEntries(wordsByType.entries())
+      recordsByType: Object.fromEntries(recordsByType.entries())
     };
 
     await fs.mkdir(path.dirname(cacheFilePath), { recursive: true });
@@ -35,13 +36,27 @@ export function createWordStore({ cacheFilePath = DEFAULT_CACHE_PATH } = {}) {
     try {
       const raw = await fs.readFile(cacheFilePath, 'utf8');
       const parsed = JSON.parse(raw);
-      const stored = parsed?.wordsByType;
-      if (stored && typeof stored === 'object') {
-        for (const [type, words] of Object.entries(stored)) {
-          if (!Array.isArray(words)) {
+      const storedRecords = parsed?.recordsByType;
+      if (storedRecords && typeof storedRecords === 'object') {
+        for (const [type, records] of Object.entries(storedRecords)) {
+          if (!Array.isArray(records)) {
             continue;
           }
-          wordsByType.set(type, words.filter((word) => typeof word === 'string' && word.trim().length > 0));
+          const normalizedRecords = normalizeRecords(records);
+          recordsByType.set(type, normalizedRecords);
+          wordsByType.set(type, normalizedRecords.map((record) => record.word));
+        }
+      } else {
+        const storedWords = parsed?.wordsByType;
+        if (storedWords && typeof storedWords === 'object') {
+          for (const [type, words] of Object.entries(storedWords)) {
+            if (!Array.isArray(words)) {
+              continue;
+            }
+            const normalizedRecords = normalizeRecords(words);
+            recordsByType.set(type, normalizedRecords);
+            wordsByType.set(type, normalizedRecords.map((record) => record.word));
+          }
         }
       }
 
@@ -54,20 +69,40 @@ export function createWordStore({ cacheFilePath = DEFAULT_CACHE_PATH } = {}) {
     }
   };
 
-  const normalizeWords = (items) =>
-    [...new Set(
-      items
-        .map((item) => {
-          if (typeof item === 'string') {
-            return item;
+  const normalizeRecords = (items) => {
+    const seen = new Set();
+
+    return items
+      .map((item) => {
+        if (typeof item === 'string') {
+          const word = item.trim();
+          return word ? { word, category: null, hint: null } : null;
+        }
+
+        if (item && typeof item === 'object') {
+          const word = String(item.word ?? item.sanitized_text ?? item.text ?? '').trim();
+          const category = String(item.category ?? '').trim() || null;
+          const hint = String(item.hint ?? '').trim() || null;
+
+          if (!word) {
+            return null;
           }
-          if (item && typeof item === 'object') {
-            return item.word ?? item.sanitized_text ?? item.text;
-          }
-          return null;
-        })
-        .filter((word) => typeof word === 'string' && word.trim().length > 0)
-    )];
+
+          return { word, category, hint };
+        }
+
+        return null;
+      })
+      .filter(Boolean)
+      .filter((record) => {
+        const key = `${record.category ?? ''}\u0000${record.word}`;
+        if (seen.has(key)) {
+          return false;
+        }
+        seen.add(key);
+        return true;
+      });
+  };
 
   const syncTypeFromV1Api = async (type) => {
     const words = [];
@@ -92,7 +127,7 @@ export function createWordStore({ cacheFilePath = DEFAULT_CACHE_PATH } = {}) {
         totalCount = count;
       }
 
-      words.push(...normalizeWords(page));
+      words.push(...normalizeRecords(page));
       offset += page.length;
 
       if (page.length === 0) {
@@ -104,7 +139,7 @@ export function createWordStore({ cacheFilePath = DEFAULT_CACHE_PATH } = {}) {
       }
     }
 
-    return [...new Set(words)];
+    return words;
   };
 
   const syncTypeFromLegacyApi = async (type) => {
@@ -118,7 +153,7 @@ export function createWordStore({ cacheFilePath = DEFAULT_CACHE_PATH } = {}) {
       throw new Error(`Unexpected legacy payload for type ${type}`);
     }
 
-    return normalizeWords(words);
+    return normalizeRecords(words);
   };
 
   const syncType = async (type) => {
@@ -131,7 +166,8 @@ export function createWordStore({ cacheFilePath = DEFAULT_CACHE_PATH } = {}) {
         if (normalized.length === 0) {
           throw new Error(`No words returned for type ${type}`);
         }
-        wordsByType.set(type, normalized);
+        recordsByType.set(type, normalized);
+        wordsByType.set(type, normalized.map((record) => record.word));
         return;
       } catch (error) {
         errors.push(error);
@@ -171,6 +207,14 @@ export function createWordStore({ cacheFilePath = DEFAULT_CACHE_PATH } = {}) {
     return words[Math.floor(Math.random() * words.length)];
   };
 
+  const getCategories = (type) =>
+    [...new Set((recordsByType.get(type) ?? []).map((record) => record.category).filter(Boolean))];
+
+  const getWordsForCategory = (type, category) =>
+    (recordsByType.get(type) ?? [])
+      .filter((record) => record.category === category)
+      .map((record) => record.word);
+
   const startSchedule = () => {
     cron.schedule('0 0 * * 0', () => {
       sync().catch(() => undefined);
@@ -179,6 +223,8 @@ export function createWordStore({ cacheFilePath = DEFAULT_CACHE_PATH } = {}) {
 
   return {
     getRandomWord,
+    getCategories,
+    getWordsForCategory,
     initialize,
     sync,
     startSchedule,

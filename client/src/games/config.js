@@ -17,12 +17,12 @@ export const games = [
   {
     id: 'whowhatwhere',
     name: 'WhoWhatWhere',
-    tagline: 'Articulate-style team rounds, built for phones.',
-    description: 'Split into teams, rotate the describer, and race the clock to land as many words as you can.',
+    tagline: 'Articulate-style team rounds, simplified for phones.',
+    description: 'Auto-balanced teams race the clock, with a fresh category chosen at the start of every turn.',
     howToPlay: [
-      'Join a team in the lobby, rename teams if you want, and get everyone ready.',
+      'The host chooses 2, 3, or 4 teams. Players are assigned automatically to the smallest team as they join.',
       'One describer starts a timed turn while teammates guess out loud from their own phones or around the same device.',
-      'Each team gets one turn per round. Correct answers add points, and extra skips cost points.'
+      'Each turn picks a random category, and every word in that turn comes from that category.'
     ],
     minPlayers: 4,
     supportsLocal: true,

@@ -11,23 +11,27 @@ const GAME_MIN_PLAYERS = {
 };
 
 export const DEFAULT_WHOWHATWHERE_SETTINGS = {
+  teamCount: 2,
   turnDurationSeconds: 45,
   totalRounds: 3,
   freeSkips: 1,
   skipPenalty: 1
 };
 
-export const DEFAULT_WHOWHATWHERE_TEAMS = [
-  { id: 'team-a', name: 'Team A', score: 0 },
-  { id: 'team-b', name: 'Team B', score: 0 }
-];
+const TEAM_LABELS = ['A', 'B', 'C', 'D'];
+
+export const buildWhoWhatWhereTeams = (teamCount = DEFAULT_WHOWHATWHERE_SETTINGS.teamCount) =>
+  TEAM_LABELS.slice(0, Math.min(Math.max(teamCount, 2), 4)).map((label, index) => ({
+    id: `team-${String.fromCharCode(97 + index)}`,
+    name: `Team ${label}`,
+    score: 0
+  }));
+
+export const DEFAULT_WHOWHATWHERE_TEAMS = buildWhoWhatWhereTeams();
 
 const MAX_CLUE_LENGTH = 120;
 const MAX_GUESS_LENGTH = 100;
 const MAX_DRAWING_DATA_URL_LENGTH = 800_000;
-const WHOWHATWHERE_QUEUE_SIZE = 24;
-const WHOWHATWHERE_QUEUE_REFILL_THRESHOLD = 4;
-const WHOWHATWHERE_QUEUE_REFILL_COUNT = 8;
 
 const randomItem = (items) => items[Math.floor(Math.random() * items.length)];
 const buildPrivateState = (players, mapper) => new Map(players.map((player) => [player.id, mapper(player)]));
@@ -36,8 +40,17 @@ const getPlayerIds = (players) => players.map((player) => player.id);
 const hasPlayer = (players, playerId) => players.some((player) => player.id === playerId);
 const sortPlayersBySeat = (players) => [...players].sort((left, right) => left.seat - right.seat);
 const cloneTeams = (teams = []) => teams.map((team) => ({ ...team }));
+const shuffleArray = (items) => {
+  const copy = [...items];
+  for (let index = copy.length - 1; index > 0; index -= 1) {
+    const swapIndex = Math.floor(Math.random() * (index + 1));
+    [copy[index], copy[swapIndex]] = [copy[swapIndex], copy[index]];
+  }
+  return copy;
+};
 
 const sanitizeWhoWhatWhereSettings = (settings = {}) => ({
+  teamCount: Number.isFinite(settings.teamCount) ? Math.min(Math.max(settings.teamCount, 2), 4) : DEFAULT_WHOWHATWHERE_SETTINGS.teamCount,
   turnDurationSeconds: Number.isFinite(settings.turnDurationSeconds) ? settings.turnDurationSeconds : DEFAULT_WHOWHATWHERE_SETTINGS.turnDurationSeconds,
   totalRounds: Number.isFinite(settings.totalRounds) ? settings.totalRounds : DEFAULT_WHOWHATWHERE_SETTINGS.totalRounds,
   freeSkips: Number.isFinite(settings.freeSkips) ? settings.freeSkips : DEFAULT_WHOWHATWHERE_SETTINGS.freeSkips,
@@ -66,6 +79,7 @@ const buildWhoWhatWhereTurnSnapshot = (activeTurn) => {
     startedAt: activeTurn.startedAt,
     endsAt: activeTurn.endsAt,
     durationSeconds: activeTurn.durationSeconds,
+    category: activeTurn.category,
     score: activeTurn.score,
     correctCount: activeTurn.correctCount,
     skippedCount: activeTurn.skippedCount,
@@ -162,6 +176,7 @@ const buildWhoWhatWherePrivateState = (players, publicState, internalState, team
       canMarkCorrect: publicState.stage === 'turn' && isDescriber,
       canSkip: publicState.stage === 'turn' && isDescriber,
       canEndTurn: publicState.stage === 'turn' && isDescriber,
+      category: publicState.stage === 'turn' ? activeTurn?.category ?? null : null,
       word: publicState.stage === 'turn' && isDescriber ? currentWord : null
     };
   });
@@ -239,32 +254,18 @@ const buildImposterState = ({ players, word }) => {
   };
 };
 
-const collectWhoWhatWhereWordQueue = (wordStore, count) => {
-  const queue = [];
-  const seen = new Set();
-  let attempts = 0;
-
-  while (queue.length < count && attempts < count * 12) {
-    attempts += 1;
-    const nextWord = wordStore.getRandomWord(GAME_WORD_TYPE.whowhatwhere);
-    if (!nextWord) {
-      break;
-    }
-
-    const normalized = normalizeText(nextWord);
-    if (!normalized) {
-      continue;
-    }
-
-    if (seen.has(normalized) && attempts < count * 8) {
-      continue;
-    }
-
-    seen.add(normalized);
-    queue.push(normalized);
+const pickWhoWhatWhereCategory = (wordStore) => {
+  const categories = wordStore.getCategories(GAME_WORD_TYPE.whowhatwhere);
+  if (categories.length === 0) {
+    return null;
   }
 
-  return queue;
+  return randomItem(categories);
+};
+
+const collectWhoWhatWhereWordQueue = (wordStore, category) => {
+  const words = wordStore.getWordsForCategory(GAME_WORD_TYPE.whowhatwhere, category);
+  return shuffleArray(words.map((word) => normalizeText(word)).filter(Boolean));
 };
 
 const buildWhoWhatWhereState = ({ players, teams, settings }) => {
@@ -554,9 +555,14 @@ function applyWhoWhatWhereAction({ players, teams, playerId, action, publicState
       return { error: 'Only the active describer can start this turn' };
     }
 
-    const wordQueue = collectWhoWhatWhereWordQueue(wordStore, WHOWHATWHERE_QUEUE_SIZE);
+    const category = pickWhoWhatWhereCategory(wordStore);
+    if (!category) {
+      return { error: 'Unable to load categories for this turn right now' };
+    }
+
+    const wordQueue = collectWhoWhatWhereWordQueue(wordStore, category);
     if (wordQueue.length === 0) {
-      return { error: 'Unable to load words for this turn right now' };
+      return { error: 'Unable to load words for the selected category right now' };
     }
 
     const startedAt = Date.now();
@@ -564,6 +570,7 @@ function applyWhoWhatWhereAction({ players, teams, playerId, action, publicState
       startedAt: new Date(startedAt).toISOString(),
       endsAt: new Date(startedAt + internalState.settings.turnDurationSeconds * 1000).toISOString(),
       durationSeconds: internalState.settings.turnDurationSeconds,
+      category,
       wordQueue,
       queueIndex: 0,
       score: 0,
@@ -675,11 +682,10 @@ function applyWhoWhatWhereAction({ players, teams, playerId, action, publicState
 
   nextActiveTurn.queueIndex += 1;
 
-  const remainingWords = nextActiveTurn.wordQueue.length - nextActiveTurn.queueIndex;
-  if (remainingWords <= WHOWHATWHERE_QUEUE_REFILL_THRESHOLD) {
+  if (!nextActiveTurn.wordQueue[nextActiveTurn.queueIndex]) {
     nextActiveTurn.wordQueue = [
       ...nextActiveTurn.wordQueue,
-      ...collectWhoWhatWhereWordQueue(wordStore, WHOWHATWHERE_QUEUE_REFILL_COUNT)
+      ...collectWhoWhatWhereWordQueue(wordStore, nextActiveTurn.category)
     ];
   }
 

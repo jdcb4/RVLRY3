@@ -1,9 +1,9 @@
 import { randomUUID } from 'node:crypto';
 import {
   applyGameAction,
+  buildWhoWhatWhereTeams,
   buildGameStartState,
   DEFAULT_WHOWHATWHERE_SETTINGS,
-  DEFAULT_WHOWHATWHERE_TEAMS,
   getMinPlayersForGame,
   getWordTypeForGame
 } from './gameEngines/index.js';
@@ -15,7 +15,6 @@ const randomCode = () => Math.random().toString(36).slice(2, 8).toUpperCase();
 const normalizeCode = (code) => String(code ?? '').trim().toUpperCase();
 const normalizePlayerName = (playerName) => String(playerName ?? '').trim() || 'Player';
 const normalizeTeamName = (teamName, fallback) => String(teamName ?? '').trim() || fallback;
-const cloneTeams = (teams) => teams.map((team) => ({ ...team }));
 
 const clampInteger = (value, minimum, maximum, fallback) => {
   const parsed = Number.parseInt(value ?? '', 10);
@@ -26,6 +25,7 @@ const clampInteger = (value, minimum, maximum, fallback) => {
 };
 
 const sanitizeWhoWhatWhereSettings = (settings = {}) => ({
+  teamCount: clampInteger(settings.teamCount, 2, 4, DEFAULT_WHOWHATWHERE_SETTINGS.teamCount),
   turnDurationSeconds: clampInteger(settings.turnDurationSeconds, 15, 90, DEFAULT_WHOWHATWHERE_SETTINGS.turnDurationSeconds),
   totalRounds: clampInteger(settings.totalRounds, 1, 8, DEFAULT_WHOWHATWHERE_SETTINGS.totalRounds),
   freeSkips: clampInteger(settings.freeSkips, 0, 4, DEFAULT_WHOWHATWHERE_SETTINGS.freeSkips),
@@ -177,6 +177,64 @@ const emitPrivateState = (io, room, player) => {
 
 const isWhoWhatWhereRoom = (room) => room.gameId === 'whowhatwhere';
 
+const getLeastFilledTeamId = (room, teams = room.teams) => {
+  const counts = new Map(teams.map((team) => [team.id, 0]));
+  for (const player of room.players) {
+    if (counts.has(player.teamId)) {
+      counts.set(player.teamId, counts.get(player.teamId) + 1);
+    }
+  }
+
+  let lowestTeamId = teams[0]?.id ?? null;
+  let lowestCount = Number.POSITIVE_INFINITY;
+
+  for (const team of teams) {
+    const count = counts.get(team.id) ?? 0;
+    if (count < lowestCount) {
+      lowestCount = count;
+      lowestTeamId = team.id;
+    }
+  }
+
+  return lowestTeamId;
+};
+
+const autoAssignWhoWhatWherePlayer = (room, player) => {
+  if (!isWhoWhatWhereRoom(room) || room.phase !== 'lobby' || room.teams.length === 0) {
+    return;
+  }
+
+  if (room.teams.some((team) => team.id === player.teamId)) {
+    return;
+  }
+
+  player.teamId = getLeastFilledTeamId(room);
+};
+
+const applyWhoWhatWhereTeamCount = (room, nextTeamCount) => {
+  if (!isWhoWhatWhereRoom(room)) {
+    return;
+  }
+
+  const existingTeams = room.teams ?? [];
+  const nextTeams = buildWhoWhatWhereTeams(nextTeamCount).map((team) => {
+    const existing = existingTeams.find((entry) => entry.id === team.id);
+    return existing ? { ...team, name: existing.name, score: 0 } : team;
+  });
+
+  room.teams = nextTeams;
+
+  for (const player of room.players) {
+    player.teamId = null;
+    player.ready = false;
+  }
+
+  sortPlayers(room);
+  for (const player of room.players) {
+    autoAssignWhoWhatWherePlayer(room, player);
+  }
+};
+
 const scheduleWhoWhatWhereTurnExpiry = (io, room, wordStore) => {
   clearRoomGameTimer(room);
 
@@ -250,7 +308,7 @@ const createRoomState = ({ code, gameId, hostPlayer }) => ({
   gamePublicState: null,
   gamePrivateState: new Map(),
   gameInternalState: null,
-  teams: gameId === 'whowhatwhere' ? cloneTeams(DEFAULT_WHOWHATWHERE_TEAMS) : null,
+  teams: gameId === 'whowhatwhere' ? buildWhoWhatWhereTeams(DEFAULT_WHOWHATWHERE_SETTINGS.teamCount) : null,
   settings: gameId === 'whowhatwhere' ? { ...DEFAULT_WHOWHATWHERE_SETTINGS } : null,
   gameTimer: null,
   expiryTimer: null
@@ -263,12 +321,7 @@ const validateWhoWhatWhereRoomForStart = (room) => {
     return 'Every player must join a team before the game starts';
   }
 
-  const activeTeams = room.teams.filter((team) => getTeamRosterSize(room, team.id) > 0);
-  if (activeTeams.length < 2) {
-    return 'Both teams need players before you can start';
-  }
-
-  if (activeTeams.some((team) => getTeamRosterSize(room, team.id) < 2)) {
+  if (room.teams.some((team) => getTeamRosterSize(room, team.id) < 2)) {
     return 'Each team needs at least 2 players';
   }
 
@@ -310,6 +363,7 @@ export function registerRoomHandlers(io, wordStore) {
         seat: 0
       });
       const room = createRoomState({ code, gameId, hostPlayer: player });
+      autoAssignWhoWhatWherePlayer(room, player);
       rooms.set(code, room);
       socket.join(code);
       emitRoomUpdate(io, room);
@@ -348,6 +402,7 @@ export function registerRoomHandlers(io, wordStore) {
       const restoredPlayer = restorePlayerFromRejoinSlot(room, playerToken, playerName, socket.id);
       if (restoredPlayer) {
         room.players.push(restoredPlayer);
+        autoAssignWhoWhatWherePlayer(room, restoredPlayer);
         syncHost(room);
         socket.join(room.code);
         emitRoomUpdate(io, room);
@@ -371,6 +426,7 @@ export function registerRoomHandlers(io, wordStore) {
       });
       room.nextSeat += 1;
       room.players.push(player);
+      autoAssignWhoWhatWherePlayer(room, player);
       syncHost(room);
       socket.join(room.code);
       emitRoomUpdate(io, room);
@@ -479,7 +535,12 @@ export function registerRoomHandlers(io, wordStore) {
         return;
       }
 
-      room.settings = sanitizeWhoWhatWhereSettings(settings);
+      const nextSettings = sanitizeWhoWhatWhereSettings(settings);
+      const teamCountChanged = nextSettings.teamCount !== room.settings.teamCount;
+      room.settings = nextSettings;
+      if (teamCountChanged) {
+        applyWhoWhatWhereTeamCount(room, nextSettings.teamCount);
+      }
       emitRoomUpdate(io, room);
       callback?.({ ok: true });
     });
@@ -530,7 +591,9 @@ export function registerRoomHandlers(io, wordStore) {
         return;
       }
 
-      const minimumPlayers = getMinPlayersForGame(room.gameId);
+      const minimumPlayers = isWhoWhatWhereRoom(room)
+        ? Math.max(getMinPlayersForGame(room.gameId), room.settings.teamCount * 2)
+        : getMinPlayersForGame(room.gameId);
       if (room.players.length < minimumPlayers) {
         callback?.({ error: `At least ${minimumPlayers} players are required` });
         return;

@@ -419,6 +419,11 @@ summary:focus-visible {
   background: rgba(255, 255, 255, 0.03);
 }
 
+.notice-card--focus {
+  background: rgba(255, 138, 91, 0.08);
+  border-color: rgba(255, 138, 91, 0.22);
+}
+
 .turn-hero {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));

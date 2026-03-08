@@ -18,11 +18,8 @@ function TeamCard({
   pendingAction,
   teamNameDraft,
   setTeamNameDraft,
-  onAssignTeam,
   onSaveTeamName
 }) {
-  const isCurrentTeam = currentPlayer?.teamId === team.id;
-
   return (
     <article className="team-card">
       <div className="team-card__header">
@@ -66,16 +63,6 @@ function TeamCard({
           <li className="team-card__empty">No players yet</li>
         )}
       </ul>
-
-      <div className="actions actions--stretch">
-        <button
-          className={isCurrentTeam ? 'secondary-action' : ''}
-          disabled={isCurrentTeam || pendingAction === 'assign-team'}
-          onClick={() => onAssignTeam(roomCode, team.id)}
-        >
-          {isCurrentTeam ? 'On this team' : `Join ${team.name}`}
-        </button>
-      </div>
     </article>
   );
 }
@@ -90,18 +77,16 @@ function WhoWhatWhereLobby({
   setTeamNameDraft,
   settingsForm,
   updateSetting,
-  assignTeam,
   updateTeamName,
   error
 }) {
   const teamRosters = useMemo(() => buildTeamRosters(roomState), [roomState]);
-  const unassignedCount = roomState.players.filter((player) => !player.teamId).length;
 
   return (
     <section className="panel panel--stacked">
       <div className="panel-heading">
         <h2>Teams and rounds</h2>
-        <p>Split the room into two teams, rotate the describer each turn, and let the app manage rounds and scoring.</p>
+        <p>Teams are auto-balanced as people join. The host sets team count, turn length, and round count.</p>
       </div>
 
       {error && <p className="connection-banner connection-banner--error">{error}</p>}
@@ -117,7 +102,6 @@ function WhoWhatWhereLobby({
             pendingAction={pendingAction}
             teamNameDraft={teamNameDrafts[team.id] ?? team.name}
             setTeamNameDraft={setTeamNameDraft}
-            onAssignTeam={assignTeam}
             onSaveTeamName={updateTeamName}
           />
         ))}
@@ -130,6 +114,19 @@ function WhoWhatWhereLobby({
         </div>
 
         <div className="settings-grid">
+          <label className="settings-field">
+            <span className="helper-text">Teams</span>
+            <select
+              value={settingsForm.teamCount}
+              disabled={!isHost || pendingAction === 'update-settings'}
+              onChange={(event) => updateSetting('teamCount', Number.parseInt(event.target.value, 10))}
+            >
+              <option value={2}>2 teams</option>
+              <option value={3}>3 teams</option>
+              <option value={4}>4 teams</option>
+            </select>
+          </label>
+
           <label className="settings-field">
             <span className="helper-text">Turn length</span>
             <select
@@ -185,6 +182,10 @@ function WhoWhatWhereLobby({
             </select>
           </label>
         </div>
+
+        <p className="helper-text">
+          New players are placed on the smallest team automatically. Ties go to the earliest team.
+        </p>
       </section>
 
       <div className="summary-chips">
@@ -195,13 +196,15 @@ function WhoWhatWhereLobby({
           </strong>
         </div>
         <div className="summary-chip">
-          <span className="summary-chip__label">Unassigned</span>
-          <strong className="summary-chip__value">{unassignedCount}</strong>
-        </div>
-        <div className="summary-chip">
           <span className="summary-chip__label">Your team</span>
           <strong className="summary-chip__value">
-            {teamRosters.find((team) => team.id === currentPlayer?.teamId)?.name ?? 'Pick one'}
+            {teamRosters.find((team) => team.id === currentPlayer?.teamId)?.name ?? 'Assigning'}
+          </strong>
+        </div>
+        <div className="summary-chip">
+          <span className="summary-chip__label">Players needed</span>
+          <strong className="summary-chip__value">
+            {Math.max(0, (settingsForm.teamCount * 2) - roomState.players.length)}
           </strong>
         </div>
       </div>
@@ -252,15 +255,12 @@ function StandardLobby({ roomState, playerId, currentPlayer, isHost, pendingActi
 
 const getWhoWhatWhereStartHint = ({ roomState, game, isHost, readyCount, allPlayersReady }) => {
   const teamRosters = buildTeamRosters(roomState);
+  const requiredPlayers = Math.max(game.minPlayers, (roomState.settings?.teamCount ?? 2) * 2);
 
-  if (roomState.players.length < game.minPlayers) {
-    return `Need ${game.minPlayers - roomState.players.length} more player${
-      game.minPlayers - roomState.players.length === 1 ? '' : 's'
+  if (roomState.players.length < requiredPlayers) {
+    return `Need ${requiredPlayers - roomState.players.length} more player${
+      requiredPlayers - roomState.players.length === 1 ? '' : 's'
     }`;
-  }
-
-  if (roomState.players.some((player) => !player.teamId)) {
-    return 'Every player needs a team';
   }
 
   if (teamRosters.some((team) => team.players.length < 2)) {
@@ -286,7 +286,6 @@ export function GameLobbyScreen() {
     error,
     pendingAction,
     ensureRoom,
-    assignTeam,
     updateTeamName,
     updateRoomSettings,
     setReady,
@@ -295,6 +294,7 @@ export function GameLobbyScreen() {
   const [shareStatus, setShareStatus] = useState('');
   const [teamNameDrafts, setTeamNameDrafts] = useState({});
   const [settingsForm, setSettingsForm] = useState({
+    teamCount: 2,
     turnDurationSeconds: 45,
     totalRounds: 3,
     freeSkips: 1,
@@ -372,7 +372,9 @@ export function GameLobbyScreen() {
           : `${readyCount} / ${roomState.players.length} ready`;
 
   const canStart = useMemo(() => {
-    if (!roomState || !isHost || roomState.players.length < game.minPlayers || !allPlayersReady) {
+    const requiredPlayers = Math.max(game.minPlayers, (roomState?.settings?.teamCount ?? 2) * 2);
+
+    if (!roomState || !isHost || roomState.players.length < requiredPlayers || !allPlayersReady) {
       return false;
     }
 
@@ -526,7 +528,6 @@ export function GameLobbyScreen() {
             setTeamNameDraft={handleSetTeamNameDraft}
             settingsForm={settingsForm}
             updateSetting={handleUpdateSetting}
-            assignTeam={assignTeam}
             updateTeamName={updateTeamName}
             error={error}
           />
