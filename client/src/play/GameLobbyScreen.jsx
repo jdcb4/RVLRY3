@@ -10,6 +10,34 @@ const buildTeamRosters = (roomState) =>
     players: roomState.players.filter((player) => player.teamId === team.id)
   }));
 
+function ArrowLeftIcon() {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 20 20" fill="none">
+      <path
+        d="M11.75 4.75 6.5 10l5.25 5.25M7 10h6.5"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth="1.8"
+      />
+    </svg>
+  );
+}
+
+function ShareIcon() {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 20 20" fill="none">
+      <path
+        d="M10 13.25V4.5M10 4.5 6.75 7.75M10 4.5l3.25 3.25M5.5 10.75v3.25c0 .69.56 1.25 1.25 1.25h6.5c.69 0 1.25-.56 1.25-1.25v-3.25"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth="1.8"
+      />
+    </svg>
+  );
+}
+
 function TeamCard({
   team,
   currentPlayer,
@@ -51,12 +79,12 @@ function TeamCard({
               <div className="player-row__identity">
                 <span className="player-row__name">{player.name}</span>
                 <div className="player-row__meta">
+                  <span className={player.ready ? 'badge badge--ready' : 'badge'}>
+                    {player.ready ? 'Ready' : 'Waiting'}
+                  </span>
                   {player.id === currentPlayer?.id && <span className="badge badge--self">You</span>}
                 </div>
               </div>
-              <span className={player.ready ? 'badge badge--ready' : 'badge'}>
-                {player.ready ? 'Ready' : 'Waiting'}
-              </span>
             </li>
           ))
         ) : (
@@ -85,8 +113,7 @@ function WhoWhatWhereLobby({
   return (
     <section className="panel panel--stacked">
       <div className="panel-heading">
-        <h2>Teams and rounds</h2>
-        <p>Teams are auto-balanced as people join. The host sets team count, turn length, and round count.</p>
+        <h2>Teams</h2>
       </div>
 
       {error && <p className="connection-banner connection-banner--error">{error}</p>}
@@ -110,7 +137,6 @@ function WhoWhatWhereLobby({
       <section className="settings-card">
         <div className="panel-heading">
           <h3>Match settings</h3>
-          <p>{isHost ? 'Changes apply immediately while the room is in the lobby.' : 'The host controls the timer and round settings.'}</p>
         </div>
 
         <div className="settings-grid">
@@ -182,32 +208,7 @@ function WhoWhatWhereLobby({
             </select>
           </label>
         </div>
-
-        <p className="helper-text">
-          New players are placed on the smallest team automatically. Ties go to the earliest team.
-        </p>
       </section>
-
-      <div className="summary-chips">
-        <div className="summary-chip">
-          <span className="summary-chip__label">Teams ready</span>
-          <strong className="summary-chip__value">
-            {teamRosters.filter((team) => team.players.length >= 2).length} / {teamRosters.length}
-          </strong>
-        </div>
-        <div className="summary-chip">
-          <span className="summary-chip__label">Your team</span>
-          <strong className="summary-chip__value">
-            {teamRosters.find((team) => team.id === currentPlayer?.teamId)?.name ?? 'Assigning'}
-          </strong>
-        </div>
-        <div className="summary-chip">
-          <span className="summary-chip__label">Players needed</span>
-          <strong className="summary-chip__value">
-            {Math.max(0, (settingsForm.teamCount * 2) - roomState.players.length)}
-          </strong>
-        </div>
-      </div>
     </section>
   );
 }
@@ -217,7 +218,6 @@ function StandardLobby({ roomState, playerId, currentPlayer, isHost, pendingActi
     <section className="panel panel--stacked">
       <div className="panel-heading">
         <h2>Players</h2>
-        <p>{isHost ? 'You control the start once the room is ready.' : 'Only the host can launch the round.'}</p>
       </div>
 
       {error && <p className="connection-banner connection-banner--error">{error}</p>}
@@ -253,25 +253,41 @@ function StandardLobby({ roomState, playerId, currentPlayer, isHost, pendingActi
   );
 }
 
-const getWhoWhatWhereStartHint = ({ roomState, game, isHost, readyCount, allPlayersReady }) => {
-  const teamRosters = buildTeamRosters(roomState);
-  const requiredPlayers = Math.max(game.minPlayers, (roomState.settings?.teamCount ?? 2) * 2);
-
-  if (roomState.players.length < requiredPlayers) {
-    return `Need ${requiredPlayers - roomState.players.length} more player${
-      requiredPlayers - roomState.players.length === 1 ? '' : 's'
-    }`;
+const getStartWarning = ({ roomState, game, isHost, allPlayersReady }) => {
+  if (!roomState) {
+    return 'Lobby is still loading';
   }
 
-  if (teamRosters.some((team) => team.players.length < 2)) {
-    return 'Each team needs at least 2 players';
+  if (!isHost) {
+    return 'Only the host can start the game';
+  }
+
+  if (game.gameplayView === 'whowhatwhere') {
+    const teamCount = roomState.settings?.teamCount ?? 2;
+    const requiredPlayers = Math.max(game.minPlayers, teamCount * 2);
+
+    if (roomState.players.length < requiredPlayers) {
+      return `Need at least ${requiredPlayers} players to start`;
+    }
+
+    const teamRosters = buildTeamRosters(roomState);
+
+    if (roomState.players.some((player) => !player.teamId)) {
+      return 'Wait for team assignment to finish';
+    }
+
+    if (teamRosters.some((team) => team.players.length < 2)) {
+      return 'Each team needs at least 2 players';
+    }
+  } else if (roomState.players.length < game.minPlayers) {
+    return `Need at least ${game.minPlayers} players to start`;
   }
 
   if (!allPlayersReady) {
-    return `${readyCount} / ${roomState.players.length} ready`;
+    return 'Everyone needs to be ready before the game can start';
   }
 
-  return isHost ? 'Ready to start' : 'Waiting for host';
+  return null;
 };
 
 export function GameLobbyScreen() {
@@ -291,7 +307,7 @@ export function GameLobbyScreen() {
     setReady,
     startGame
   } = usePlaySession();
-  const [shareStatus, setShareStatus] = useState('');
+  const [toastMessage, setToastMessage] = useState('');
   const [teamNameDrafts, setTeamNameDrafts] = useState({});
   const [settingsForm, setSettingsForm] = useState({
     teamCount: 2,
@@ -356,51 +372,28 @@ export function GameLobbyScreen() {
   }, [roomState?.settings]);
 
   const isHost = roomState?.hostId === playerId;
-  const readyCount = roomState?.players.filter((player) => player.ready).length ?? 0;
   const allPlayersReady = roomState?.players.every((player) => player.ready) ?? false;
-  const lobbyHeading = roomState ? `Room ${roomState.code}` : `Joining ${roomCode}`;
   const inviteLink = buildInviteLink(game.id, roomCode);
-  const readinessLabel =
-    roomState && game.gameplayView === 'whowhatwhere'
-      ? getWhoWhatWhereStartHint({ roomState, game, isHost, readyCount, allPlayersReady })
-      : !roomState
-        ? 'Connecting to lobby'
-        : roomState.players.length < game.minPlayers
-          ? `Waiting for ${game.minPlayers - roomState.players.length} more player${
-              game.minPlayers - roomState.players.length === 1 ? '' : 's'
-            }`
-          : `${readyCount} / ${roomState.players.length} ready`;
+  const startWarning = useMemo(
+    () => getStartWarning({ roomState, game, isHost, allPlayersReady }),
+    [allPlayersReady, game, isHost, roomState]
+  );
 
-  const canStart = useMemo(() => {
-    const requiredPlayers = Math.max(game.minPlayers, (roomState?.settings?.teamCount ?? 2) * 2);
-
-    if (!roomState || !isHost || roomState.players.length < requiredPlayers || !allPlayersReady) {
-      return false;
+  useEffect(() => {
+    if (!toastMessage) {
+      return undefined;
     }
 
-    if (game.gameplayView !== 'whowhatwhere') {
-      return true;
-    }
-
-    const teamRosters = buildTeamRosters(roomState);
-    return (
-      roomState.players.every((player) => player.teamId) &&
-      teamRosters.length >= 2 &&
-      teamRosters.every((team) => team.players.length >= 2)
-    );
-  }, [allPlayersReady, game.gameplayView, game.minPlayers, isHost, roomState]);
-
-  const flashStatus = (message) => {
-    setShareStatus(message);
-    window.setTimeout(() => setShareStatus(''), 1800);
-  };
+    const timeoutId = window.setTimeout(() => setToastMessage(''), 2200);
+    return () => window.clearTimeout(timeoutId);
+  }, [toastMessage]);
 
   const handleCopy = async (value, successMessage) => {
     try {
       await navigator.clipboard.writeText(value);
-      flashStatus(successMessage);
+      setToastMessage(successMessage);
     } catch {
-      flashStatus('Copy failed');
+      setToastMessage('Copy failed');
     }
   };
 
@@ -415,7 +408,7 @@ export function GameLobbyScreen() {
         text: `Join my ${game.name} room on RVLRY`,
         url: inviteLink
       });
-      flashStatus('Share sheet opened');
+      setToastMessage('Share sheet opened');
     } catch {
       // User cancelled or share failed.
     }
@@ -426,9 +419,19 @@ export function GameLobbyScreen() {
   };
 
   const handleStartGame = async () => {
+    if (startWarning) {
+      setToastMessage(startWarning);
+      return;
+    }
+
     const response = await startGame(roomCode);
     if (response.ok) {
       navigate(`/play/${game.id}/game/${roomCode}`, { replace: true });
+      return;
+    }
+
+    if (response.error) {
+      setToastMessage(response.error);
     }
   };
 
@@ -449,7 +452,7 @@ export function GameLobbyScreen() {
     return (
       <main className="scene scene--simple">
         <p className="scene__eyebrow">Lobby</p>
-        <h1 className="scene__title">{lobbyHeading}</h1>
+        <h1 className="scene__title">LOBBY</h1>
         <p className="scene__lead">Reconnecting you to the room and restoring your place.</p>
       </main>
     );
@@ -457,64 +460,51 @@ export function GameLobbyScreen() {
 
   return (
     <main className="scene scene--lobby">
-      <header className="scene__header scene__header--compact">
-        <p className="scene__eyebrow">{game.name} lobby</p>
-        <h1 className="scene__title">{lobbyHeading}</h1>
-        <p className="scene__lead">
-          Keep the lobby focused: share the room, confirm the roster, and start only when everyone is set.
-        </p>
+      <header className="scene__header scene__header--compact scene__header--with-back">
+        <div className="scene__header-row">
+          <Link className="scene__back" to={`/play/${game.id}`}>
+            <ArrowLeftIcon />
+            <span>Back</span>
+          </Link>
+        </div>
+        <h1 className="scene__title scene__title--lobby">LOBBY</h1>
       </header>
 
       <div className="panel-grid panel-grid--lobby">
         <section className="panel panel--hero panel--stacked">
           <div className="panel-heading">
-            <p className={canStart ? 'status-pill' : 'status-pill status-pill--muted'}>{readinessLabel}</p>
-            <h2>Invite players</h2>
-            <p>Use the room code for quick verbal sharing or send the direct join link from your phone.</p>
+            <h2>Invite</h2>
           </div>
 
-          <div className="room-code-card">
-            <span className="helper-text">Room code</span>
+          <div className="room-code-card room-code-card--bare">
             <strong className="room-code-card__value">{roomState.code}</strong>
           </div>
 
-          <div className="actions actions--stretch">
-            <button className="secondary-action" onClick={() => handleCopy(roomState.code, 'Room code copied')}>
+          <div className="actions actions--compact">
+            <button
+              className="secondary-action secondary-action--compact"
+              onClick={() => handleCopy(roomState.code, 'Room code copied')}
+            >
               Copy code
             </button>
-            <button className="secondary-action" onClick={() => handleCopy(inviteLink, 'Invite link copied')}>
+            <button
+              className="secondary-action secondary-action--compact"
+              onClick={() => handleCopy(inviteLink, 'Invite link copied')}
+            >
               Copy link
             </button>
             {navigator.share && (
-              <button className="secondary-action" onClick={handleShareInvite}>
-                Share invite
+              <button
+                aria-label="Share invite"
+                className="secondary-action secondary-action--compact secondary-action--icon"
+                onClick={handleShareInvite}
+              >
+                <ShareIcon />
               </button>
             )}
           </div>
 
-          <div className="invite-link-card">
-            <span className="helper-text">Direct join link</span>
-            <p className="invite-link">{inviteLink}</p>
-          </div>
-
-          {shareStatus && <p className="connection-banner">{shareStatus}</p>}
-
-          <div className="summary-chips">
-            <div className="summary-chip">
-              <span className="summary-chip__label">Minimum</span>
-              <strong className="summary-chip__value">{game.minPlayers} players</strong>
-            </div>
-            <div className="summary-chip">
-              <span className="summary-chip__label">Ready</span>
-              <strong className="summary-chip__value">{readyCount}</strong>
-            </div>
-            <div className="summary-chip">
-              <span className="summary-chip__label">Host</span>
-              <strong className="summary-chip__value">
-                {isHost ? 'You' : roomState.players.find((player) => player.id === roomState.hostId)?.name ?? 'Assigned'}
-              </strong>
-            </div>
-          </div>
+          {toastMessage && <p className="toast">{toastMessage}</p>}
         </section>
 
         {game.gameplayView === 'whowhatwhere' ? (
@@ -545,27 +535,17 @@ export function GameLobbyScreen() {
         )}
       </div>
 
-      <div className="action-bar">
-        <div className="action-bar__meta">
-          <strong>{currentPlayer?.ready ? 'You are ready' : 'Mark ready when you are set'}</strong>
-          <span>{readinessLabel}</span>
-        </div>
+      <div className="action-bar action-bar--actions-only">
         <div className="action-bar__actions">
           <button disabled={!currentPlayer || pendingAction === 'ready'} onClick={handleReadyToggle}>
             {currentPlayer?.ready ? 'Not ready' : 'Ready'}
           </button>
           {isHost && (
-            <button disabled={!canStart || pendingAction === 'start'} onClick={handleStartGame}>
+            <button disabled={pendingAction === 'start'} onClick={handleStartGame}>
               Start game
             </button>
           )}
         </div>
-      </div>
-
-      <div className="actions">
-        <Link className="button-link button-link--secondary" to={`/play/${game.id}`}>
-          Back to landing
-        </Link>
       </div>
     </main>
   );
