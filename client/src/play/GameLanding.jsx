@@ -45,36 +45,61 @@ export function GameLanding() {
     }
   };
 
+  const joinLabel = inviteRoomCode ? `Join ${inviteRoomCode}` : 'Join room';
+
   return (
     <main className="scene scene--landing">
-      <header className="scene__header">
+      <header className="scene__header scene__header--compact">
         <p className="scene__eyebrow">{game.tagline}</p>
         <h1 className="scene__title">{game.name}</h1>
         <p className="scene__lead">{game.description}</p>
+        <div className="facts-row">
+          <span className="fact-chip">{game.minPlayers}+ players</span>
+          <span className="fact-chip">{game.supportsLocal ? 'Online + pass-and-play' : 'Online only'}</span>
+          <span className="fact-chip">Room-code join</span>
+        </div>
       </header>
 
-      <div className="panel-grid">
-        <section className="panel panel--hero">
-          <p className={connectionState === 'connected' ? 'status-pill' : 'status-pill status-pill--muted'}>
-            {connectionState === 'connected' ? 'Server live' : 'Connecting'}
-          </p>
-          <h2>How this room starts</h2>
-          <ul className="rule-list">
-            {game.howToPlay.map((item) => (
-              <li key={item}>{item}</li>
-            ))}
-          </ul>
-          {game.supportsLocal && (
-            <div className="actions">
-              <Link className="button-link button-link--secondary" to={`/local/${game.id}`}>
-                Pass and play instead
-              </Link>
+      <div className="panel-grid panel-grid--landing">
+        <section className="panel panel--hero panel--stacked">
+          <div className="panel-heading">
+            <p className={connectionState === 'connected' ? 'status-pill' : 'status-pill status-pill--muted'}>
+              {connectionState === 'connected' ? 'Server live' : 'Connecting'}
+            </p>
+            <h2>{inviteRoomCode ? `Join room ${inviteRoomCode}` : 'Play online'}</h2>
+            <p>
+              Keep setup short on mobile: save your name once, then create a room or drop in with a
+              six-character code.
+            </p>
+          </div>
+
+          {currentRoomTarget && (
+            <div className="notice-card">
+              <strong>Current session found</strong>
+              <p>
+                You already have an active {roomState.phase === 'in-progress' ? 'game' : 'lobby'} for{' '}
+                {roomState.code} on this device.
+              </p>
+              <div className="actions">
+                <Link className="button-link button-link--secondary" to={currentRoomTarget}>
+                  Return to {roomState.code}
+                </Link>
+              </div>
             </div>
           )}
-        </section>
 
-        <section className="panel">
-          <h2>{inviteRoomCode ? `Join room ${inviteRoomCode}` : 'Get your room started'}</h2>
+          {!currentRoomTarget && lastRoomCode && (
+            <div className="notice-card">
+              <strong>Quick rejoin</strong>
+              <p>Jump back into your last {game.name} room without typing the code again.</p>
+              <div className="actions">
+                <button className="secondary-action" onClick={() => handleJoinRoom(lastRoomCode)}>
+                  Rejoin {lastRoomCode}
+                </button>
+              </div>
+            </div>
+          )}
+
           <div className="field-stack">
             <label>
               <span className="helper-text">Player name</span>
@@ -104,44 +129,42 @@ export function GameLanding() {
 
           {error && <p className="connection-banner connection-banner--error">{error}</p>}
 
-          <div className="actions">
+          <div className="actions actions--stretch">
             <button disabled={pendingAction === 'create'} onClick={handleCreateRoom}>
               Create room
             </button>
-            <button
-              className="secondary-action"
-              disabled={pendingAction === 'join'}
-              onClick={() => handleJoinRoom()}
-            >
-              Join room
+            <button className="secondary-action" disabled={pendingAction === 'join'} onClick={() => handleJoinRoom()}>
+              {joinLabel}
             </button>
           </div>
 
-          {currentRoomTarget && (
-            <div className="hero-strip">
-              <strong>Current room</strong>
-              <p>You still have an active {roomState.phase === 'in-progress' ? 'game' : 'lobby'} session open.</p>
-              <div className="actions">
-                <Link className="button-link button-link--secondary" to={currentRoomTarget}>
-                  Return to {roomState.code}
-                </Link>
-              </div>
-            </div>
-          )}
+          <p className="helper-text">
+            Your name stays saved on this device. Room codes are uppercase and can be shared by link
+            from the lobby.
+          </p>
+        </section>
 
-          {!currentRoomTarget && lastRoomCode && (
-            <div className="hero-strip">
-              <strong>Quick rejoin</strong>
-              <p>Jump back into your last {game.name} room without re-entering the code.</p>
-              <div className="actions">
-                <button className="secondary-action" onClick={() => handleJoinRoom(lastRoomCode)}>
-                  Rejoin {lastRoomCode}
-                </button>
-              </div>
-            </div>
-          )}
+        <section className="panel panel--stacked">
+          <div className="panel-heading">
+            <h2>How this feels in play</h2>
+            <p>The setup flow is now split into landing, lobby, and gameplay so the live round stays uncluttered.</p>
+          </div>
 
-          <div className="actions">
+          <ol className="step-list">
+            {game.howToPlay.map((item, index) => (
+              <li key={item} className="step-card">
+                <span className="step-card__index">0{index + 1}</span>
+                <span>{item}</span>
+              </li>
+            ))}
+          </ol>
+
+          <div className="actions actions--stretch">
+            {game.supportsLocal && (
+              <Link className="button-link button-link--secondary" to={`/local/${game.id}`}>
+                Pass and play instead
+              </Link>
+            )}
             <Link className="button-link button-link--secondary" to="/">
               Back to RVLRY hub
             </Link>

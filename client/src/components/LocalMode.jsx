@@ -41,29 +41,56 @@ export function LocalMode() {
   if (!game?.supportsLocal) {
     return (
       <main className="scene scene--simple">
-        <p>This game does not support local mode yet.</p>
-        <button onClick={() => navigate(`/play/${gameId}`)}>Back</button>
+        <p className="scene__eyebrow">Pass and play</p>
+        <h1 className="scene__title">Local mode unavailable</h1>
+        <p className="scene__lead">This game is currently tuned for online play only.</p>
+        <div className="actions">
+          <button onClick={() => navigate(`/play/${gameId}`)}>Back</button>
+        </div>
       </main>
     );
   }
 
   return (
     <main className="scene scene--local">
-      <header className="scene__header">
+      <header className="scene__header scene__header--compact">
         <p className="scene__eyebrow">Pass and play</p>
-        <h1 className="scene__title">{game.name} - Local mode</h1>
+        <h1 className="scene__title">{game.name}</h1>
         <p className="scene__lead">{localInstructions[gameId]}</p>
       </header>
-      <article className="panel">
-        <h2>Prompt</h2>
-        <p>{isRevealed ? prompt : 'Hidden. Tap reveal when next player is ready.'}</p>
-      </article>
-      {error && <p className="connection-banner connection-banner--error">{error}</p>}
-      <div className="actions actions--stack">
-        <button onClick={() => setIsRevealed((value) => !value)}>{isRevealed ? 'Hide' : 'Reveal'}</button>
-        <button onClick={fetchPrompt}>Next handoff</button>
-        <button onClick={() => navigate(`/play/${game.id}`)}>Done</button>
-      </div>
+
+      <section className="panel panel--hero panel--stacked">
+        <div className="panel-heading">
+          <h2>Hidden prompt</h2>
+          <p>Keep the screen covered until the next player is ready, then reveal and hand off.</p>
+        </div>
+
+        <div className="room-code-card room-code-card--prompt">
+          <span className="helper-text">Prompt</span>
+          <strong className="prompt-display">{isRevealed ? prompt : 'Hidden until reveal'}</strong>
+        </div>
+
+        {error && <p className="connection-banner connection-banner--error">{error}</p>}
+
+        <div className="action-bar action-bar--static">
+          <div className="action-bar__meta">
+            <strong>{isRevealed ? 'Prompt visible' : 'Prompt hidden'}</strong>
+            <span>{isRevealed ? 'Hide before passing the phone.' : 'Reveal when the next player is ready.'}</span>
+          </div>
+          <div className="action-bar__actions">
+            <button onClick={() => setIsRevealed((value) => !value)}>{isRevealed ? 'Hide' : 'Reveal'}</button>
+            <button className="secondary-action" onClick={fetchPrompt}>
+              Next handoff
+            </button>
+          </div>
+        </div>
+
+        <div className="actions">
+          <button className="secondary-action" onClick={() => navigate(`/play/${game.id}`)}>
+            Back to online flow
+          </button>
+        </div>
+      </section>
     </main>
   );
 }

@@ -10,21 +10,32 @@ function Home() {
   return (
     <main className="hub-shell">
       <header className="hub-hero">
-        <p className="scene__eyebrow">Mobile party games</p>
+        <p className="scene__eyebrow">Mobile-first party games</p>
         <h1 className="scene__title">RVLRY</h1>
         <p className="scene__lead">
-          Pick a game, gather a room, and move cleanly from onboarding into lobby and play.
+          Quick room-based games designed for phones first. Pick a title, start a clean lobby,
+          and keep the live round focused on what players need right now.
         </p>
+        <div className="facts-row">
+          <span className="fact-chip">3 live games</span>
+          <span className="fact-chip">Share by room code</span>
+          <span className="fact-chip">No app install</span>
+        </div>
       </header>
+
       <section className="hub-grid">
         {games.map((game) => (
           <article key={game.id} className="hub-card">
             <p className="hub-card__eyebrow">{game.tagline}</p>
             <h2>{game.name}</h2>
             <p>{game.description}</p>
+            <div className="facts-row facts-row--tight">
+              <span className="fact-chip">{game.minPlayers}+ players</span>
+              <span className="fact-chip">{game.supportsLocal ? 'Online + local' : 'Online only'}</span>
+            </div>
             <div className="actions">
               <Link className="button-link" to={`/play/${game.id}`}>
-                Open game
+                Open {game.name}
               </Link>
             </div>
           </article>

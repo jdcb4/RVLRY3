@@ -8,11 +8,63 @@ function ResultsActions({ isHost, roomCode, onReturnToLobby, pendingAction }) {
   }
 
   return (
-    <div className="actions">
+    <div className="actions actions--stretch">
       <button disabled={pendingAction === 'return-to-lobby'} onClick={() => onReturnToLobby(roomCode)}>
         Return to lobby
       </button>
     </div>
+  );
+}
+
+function SummaryChips({ items }) {
+  return (
+    <div className="summary-chips">
+      {items.filter(Boolean).map((item) => (
+        <div key={`${item.label}-${item.value}`} className="summary-chip">
+          <span className="summary-chip__label">{item.label}</span>
+          <strong className="summary-chip__value">{item.value}</strong>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function DisclosurePanel({ title, description, summary, defaultOpen = false, children }) {
+  return (
+    <details className="panel disclosure" open={defaultOpen}>
+      <summary className="disclosure__summary">
+        <div>
+          <h2>{title}</h2>
+          {description && <p>{description}</p>}
+        </div>
+        {summary ? <span className="badge">{summary}</span> : null}
+      </summary>
+      <div className="disclosure__body">{children}</div>
+    </details>
+  );
+}
+
+function GameplayPlayerList({ players, playerId, hostId, getStatus }) {
+  return (
+    <ul className="player-list">
+      {players.map((player) => {
+        const status = getStatus(player);
+        const badgeClass = status.tone === 'ready' ? 'badge badge--ready' : 'badge';
+
+        return (
+          <li key={player.id} className="player-row player-row--compact">
+            <div className="player-row__identity">
+              <span className="player-row__name">{player.name}</span>
+              <div className="player-row__meta">
+                {player.id === playerId && <span className="badge badge--self">You</span>}
+                {player.id === hostId && <span className="badge badge--host">Host</span>}
+              </div>
+            </div>
+            <span className={badgeClass}>{status.text}</span>
+          </li>
+        );
+      })}
+    </ul>
   );
 }
 
@@ -28,12 +80,14 @@ function ImposterPlay({
   returnRoomToLobby
 }) {
   const [clueText, setClueText] = useState('');
-  const stage = roomState.gamePublicState?.stage;
-  const results = roomState.gamePublicState?.results;
+  const publicState = roomState.gamePublicState;
+  const stage = publicState?.stage;
+  const results = publicState?.results;
+  const currentTurnName = playersById.get(publicState.currentTurnPlayerId)?.name ?? 'Waiting';
 
   useEffect(() => {
     setClueText('');
-  }, [stage, roomState.gamePublicState?.currentTurnPlayerId]);
+  }, [stage, publicState?.currentTurnPlayerId]);
 
   const handleSubmitClue = async () => {
     const response = await sendGameAction(roomCode, 'submit-clue', { text: clueText });
@@ -43,42 +97,29 @@ function ImposterPlay({
   };
 
   return (
-    <div className="gameplay-grid">
-      <section className="panel panel--hero">
-        <h2>Round state</h2>
-        <div className="stat-row">
-          <span>Stage</span>
-          <span>{stage === 'clues' ? 'Clue round' : stage === 'voting' ? 'Voting' : 'Results'}</span>
+    <div className="gameplay-stack">
+      <section className="panel panel--hero panel--stacked gameplay-primary">
+        <div className="panel-heading">
+          <p className="status-pill">{stage === 'clues' ? 'Clue round' : stage === 'voting' ? 'Voting' : 'Results'}</p>
+          <h2>Your role</h2>
+          <p>Keep the live action at the top. Secondary detail stays tucked below.</p>
         </div>
-        {stage === 'clues' && (
-          <div className="stat-row">
-            <span>Current player</span>
-            <span>{playersById.get(roomState.gamePublicState.currentTurnPlayerId)?.name ?? 'Waiting'}</span>
-          </div>
-        )}
-        {stage === 'voting' && (
-          <div className="stat-row">
-            <span>Votes submitted</span>
-            <span>
-              {roomState.gamePublicState.votesSubmitted} / {roomState.players.length}
-            </span>
-          </div>
-        )}
-        <div className="stat-row">
-          <span>Clues given</span>
-          <span>{roomState.gamePublicState.clueCount}</span>
-        </div>
-      </section>
 
-      <section className="panel">
-        <h2>Your role</h2>
-        <div className="stat-row">
-          <span>Role</span>
-          <span>{privateState?.role ?? 'Waiting'}</span>
-        </div>
-        <div className="stat-row">
-          <span>Word</span>
-          <span>{privateState?.word ?? 'No word. Blend in.'}</span>
+        <SummaryChips
+          items={[
+            { label: 'Stage', value: stage === 'clues' ? 'Clue' : stage === 'voting' ? 'Vote' : 'Reveal' },
+            stage === 'voting'
+              ? { label: 'Votes', value: `${publicState.votesSubmitted} / ${roomState.players.length}` }
+              : { label: 'Turn', value: currentTurnName },
+            { label: 'Clues', value: publicState.clueCount }
+          ]}
+        />
+
+        <div className="role-card">
+          <span className="helper-text">Role</span>
+          <strong className="role-card__title">{privateState?.role ?? 'Waiting'}</strong>
+          <span className="helper-text">Word</span>
+          <strong className="role-card__body">{privateState?.word ?? 'No word. Blend in.'}</strong>
         </div>
 
         {stage === 'clues' && privateState?.canClue && (
@@ -99,20 +140,20 @@ function ImposterPlay({
         )}
 
         {stage === 'clues' && !privateState?.canClue && (
-          <p className="helper-text">Wait for the active player to submit their clue.</p>
+          <p className="helper-text">{currentTurnName} is up. Watch the clue feed and get ready for your turn.</p>
         )}
 
         {stage === 'voting' && privateState?.canVote && (
           <div className="field-stack">
             <p className="helper-text">Vote for the player you think is bluffing.</p>
-            <div className="actions actions--stack">
+            <div className="actions actions--stretch">
               {roomState.players
                 .filter((player) => player.id !== playerId)
                 .map((player) => (
                   <button
                     key={player.id}
                     className="secondary-action"
-                    disabled={player.id === privateState.votedForPlayerId}
+                    disabled={pendingAction === 'cast-vote' || player.id === privateState.votedForPlayerId}
                     onClick={() => sendGameAction(roomCode, 'cast-vote', { targetPlayerId: player.id })}
                   >
                     Vote for {player.name}
@@ -128,10 +169,13 @@ function ImposterPlay({
           </p>
         )}
 
-        {stage === 'results' && (
-          <>
+        {stage === 'results' && results && (
+          <div className="field-stack">
             <p className="stage-summary">
-              {results?.outcome === 'crew' ? 'Crew wins' : 'Imposter wins'}: {results?.reason}
+              {results.outcome === 'crew' ? 'Crew wins' : 'Imposter wins'}: {results.reason}
+            </p>
+            <p className="helper-text">
+              The word was {results.secretWord}. {playersById.get(results.imposterId)?.name ?? 'The imposter'} was the imposter.
             </p>
             <ResultsActions
               isHost={isHost}
@@ -139,18 +183,35 @@ function ImposterPlay({
               onReturnToLobby={returnRoomToLobby}
               pendingAction={pendingAction}
             />
-          </>
+          </div>
         )}
       </section>
 
-      <section className="panel">
-        <h2>Clues</h2>
-        {roomState.gamePublicState.clues.length === 0 ? (
-          <p className="helper-text">Clues will appear here as the round moves around the room.</p>
-        ) : (
+      <DisclosurePanel
+        title={stage === 'results' ? 'Vote board' : 'Clue feed'}
+        description={stage === 'results' ? 'See how the room voted and who was accused.' : 'A quick reference for the room without burying the main action.'}
+        summary={stage === 'results' ? `${results?.voteTally?.length ?? 0} players` : `${publicState.clues.length} clues`}
+        defaultOpen={stage === 'results'}
+      >
+        {stage === 'results' && results ? (
           <ul className="player-list">
-            {roomState.gamePublicState.clues.map((clue) => (
-              <li key={`${clue.playerId}-${clue.text}`} className="player-row">
+            {results.voteTally.map((entry) => (
+              <li key={entry.playerId} className="player-row player-row--compact">
+                <div className="player-row__identity">
+                  <span className="player-row__name">{playersById.get(entry.playerId)?.name ?? 'Player'}</span>
+                  <div className="player-row__meta">
+                    {entry.playerId === results.imposterId && <span className="badge badge--host">Imposter</span>}
+                    {results.accusedPlayerId === entry.playerId && <span className="badge badge--self">Accused</span>}
+                  </div>
+                </div>
+                <span className="badge">{entry.votes} vote(s)</span>
+              </li>
+            ))}
+          </ul>
+        ) : publicState.clues.length > 0 ? (
+          <ul className="player-list">
+            {publicState.clues.map((clue) => (
+              <li key={`${clue.playerId}-${clue.text}`} className="player-row player-row--compact">
                 <div className="player-row__identity">
                   <span className="player-row__name">{playersById.get(clue.playerId)?.name ?? 'Player'}</span>
                   <span className="helper-text">{clue.text}</span>
@@ -158,38 +219,22 @@ function ImposterPlay({
               </li>
             ))}
           </ul>
-        )}
-      </section>
-
-      <section className="panel">
-        <h2>{stage === 'results' ? 'Vote outcome' : 'Players'}</h2>
-        {stage === 'results' && results ? (
-          <ul className="player-list">
-            {results.voteTally.map((entry) => (
-              <li key={entry.playerId} className="player-row">
-                <div className="player-row__identity">
-                  <span className="player-row__name">{playersById.get(entry.playerId)?.name ?? 'Player'}</span>
-                  <span className="helper-text">
-                    {entry.playerId === results.imposterId ? 'Imposter' : 'Crew'} {results.accusedPlayerId === entry.playerId ? '| accused' : ''}
-                  </span>
-                </div>
-                <span className="badge">{entry.votes} vote(s)</span>
-              </li>
-            ))}
-          </ul>
         ) : (
-          <ul className="player-list">
-            {roomState.players.map((player) => (
-              <li key={player.id} className="player-row">
-                <div className="player-row__identity">
-                  <span className="player-row__name">{player.name}</span>
-                </div>
-                <span className="badge">{player.id === roomState.gamePublicState.currentTurnPlayerId ? 'Current' : 'Waiting'}</span>
-              </li>
-            ))}
-          </ul>
+          <p className="helper-text">Clues will appear here as they are submitted.</p>
         )}
-      </section>
+      </DisclosurePanel>
+
+      <DisclosurePanel title="Players" description="Host, turn order, and active status in one place." summary={`${roomState.players.length} connected`}>
+        <GameplayPlayerList
+          players={roomState.players}
+          playerId={playerId}
+          hostId={roomState.hostId}
+          getStatus={(player) => ({
+            text: player.id === publicState.currentTurnPlayerId && stage === 'clues' ? 'Current' : 'Waiting',
+            tone: player.id === publicState.currentTurnPlayerId && stage === 'clues' ? 'ready' : 'default'
+          })}
+        />
+      </DisclosurePanel>
     </div>
   );
 }
@@ -199,71 +244,67 @@ function WhoWhatWherePlay({
   roomState,
   privateState,
   playersById,
+  playerId,
   isHost,
   pendingAction,
   sendGameAction,
   returnRoomToLobby
 }) {
-  const stage = roomState.gamePublicState?.stage;
-  const results = roomState.gamePublicState?.results;
+  const publicState = roomState.gamePublicState;
+  const stage = publicState?.stage;
+  const results = publicState?.results;
+  const activePlayerName = playersById.get(publicState.activePlayerId)?.name ?? 'Waiting';
 
   return (
-    <div className="gameplay-grid">
-      <section className="panel panel--hero">
-        <h2>Round state</h2>
-        <div className="stat-row">
-          <span>Stage</span>
-          <span>{stage === 'turn' ? 'Live turn' : 'Results'}</span>
+    <div className="gameplay-stack">
+      <section className="panel panel--hero panel--stacked gameplay-primary">
+        <div className="panel-heading">
+          <p className="status-pill">{stage === 'turn' ? 'Live turn' : 'Results'}</p>
+          <h2>{privateState?.isActive ? 'Your prompt' : 'Room focus'}</h2>
+          <p>Keep the active describer in control while the rest of the room stays oriented.</p>
         </div>
-        {stage === 'turn' && (
-          <>
-            <div className="stat-row">
-              <span>Active describer</span>
-              <span>{playersById.get(roomState.gamePublicState.activePlayerId)?.name ?? 'Waiting'}</span>
-            </div>
-            <div className="stat-row">
-              <span>Turn</span>
-              <span>
-                {roomState.gamePublicState.turnNumber} / {roomState.gamePublicState.totalTurns}
-              </span>
-            </div>
-          </>
-        )}
-        <div className="stat-row">
-          <span>Guessed</span>
-          <span>{roomState.gamePublicState.guessed}</span>
-        </div>
-        <div className="stat-row">
-          <span>Skipped</span>
-          <span>{roomState.gamePublicState.skipped}</span>
-        </div>
-      </section>
 
-      <section className="panel">
-        <h2>{privateState?.isActive ? 'Your prompt' : 'Waiting on describer'}</h2>
+        <SummaryChips
+          items={[
+            { label: 'Describer', value: activePlayerName },
+            stage === 'turn'
+              ? { label: 'Turn', value: `${publicState.turnNumber} / ${publicState.totalTurns}` }
+              : { label: 'Turns', value: publicState.turnSummary.length },
+            { label: 'Guessed', value: publicState.guessed },
+            { label: 'Skipped', value: publicState.skipped }
+          ]}
+        />
+
         {privateState?.isActive ? (
-          <>
-            <p className="stage-summary">{privateState.word}</p>
-            <p className="helper-text">Describe this clearly without saying the word itself.</p>
-            <div className="actions">
-              <button disabled={pendingAction === 'mark-guessed'} onClick={() => sendGameAction(roomCode, 'mark-guessed')}>
-                Mark guessed
-              </button>
-              <button
-                className="secondary-action"
-                disabled={pendingAction === 'mark-skipped'}
-                onClick={() => sendGameAction(roomCode, 'mark-skipped')}
-              >
-                Skip word
-              </button>
-            </div>
-          </>
+          <div className="role-card">
+            <span className="helper-text">Describe this prompt</span>
+            <strong className="role-card__title">{privateState.word}</strong>
+            <span className="role-card__body">Speak clearly without saying the answer itself.</span>
+          </div>
         ) : (
-          <p className="helper-text">
-            {stage === 'turn'
-              ? `${playersById.get(roomState.gamePublicState.activePlayerId)?.name ?? 'A player'} is describing a ${roomState.gamePublicState.currentWordLength}-letter word.`
-              : 'The round has finished.'}
-          </p>
+          <div className="notice-card">
+            <strong>{activePlayerName} is live</strong>
+            <p>
+              {stage === 'turn'
+                ? `${activePlayerName} is describing a ${publicState.currentWordLength}-letter word.`
+                : 'The round has finished and the full prompt log is ready below.'}
+            </p>
+          </div>
+        )}
+
+        {privateState?.isActive && stage === 'turn' && (
+          <div className="actions actions--stretch">
+            <button disabled={pendingAction === 'mark-guessed'} onClick={() => sendGameAction(roomCode, 'mark-guessed')}>
+              Mark guessed
+            </button>
+            <button
+              className="secondary-action"
+              disabled={pendingAction === 'mark-skipped'}
+              onClick={() => sendGameAction(roomCode, 'mark-skipped')}
+            >
+              Skip word
+            </button>
+          </div>
         )}
 
         {stage === 'results' && (
@@ -276,14 +317,28 @@ function WhoWhatWherePlay({
         )}
       </section>
 
-      <section className="panel">
-        <h2>Turn summary</h2>
-        {roomState.gamePublicState.turnSummary.length === 0 ? (
-          <p className="helper-text">Each resolved prompt will be recorded here.</p>
-        ) : (
+      <DisclosurePanel
+        title={stage === 'results' ? 'Resolved prompts' : 'Turn summary'}
+        description={stage === 'results' ? 'Every completed prompt from the round.' : 'Recent turn outcomes so the room can stay in sync.'}
+        summary={`${publicState.turnSummary.length} logged`}
+        defaultOpen={stage === 'results'}
+      >
+        {stage === 'results' && results ? (
           <ul className="player-list">
-            {roomState.gamePublicState.turnSummary.map((entry, index) => (
-              <li key={`${entry.playerId}-${entry.outcome}-${index}`} className="player-row">
+            {results.turns.map((turn, index) => (
+              <li key={`${turn.playerId}-${turn.word}-${index}`} className="player-row player-row--compact">
+                <div className="player-row__identity">
+                  <span className="player-row__name">{playersById.get(turn.playerId)?.name ?? 'Player'}</span>
+                  <span className="helper-text">{turn.word}</span>
+                </div>
+                <span className={turn.outcome === 'guessed' ? 'badge badge--ready' : 'badge'}>{turn.outcome}</span>
+              </li>
+            ))}
+          </ul>
+        ) : publicState.turnSummary.length > 0 ? (
+          <ul className="player-list">
+            {publicState.turnSummary.map((entry, index) => (
+              <li key={`${entry.playerId}-${entry.outcome}-${index}`} className="player-row player-row--compact">
                 <div className="player-row__identity">
                   <span className="player-row__name">{playersById.get(entry.playerId)?.name ?? 'Player'}</span>
                   <span className="helper-text">{entry.wordLength}-letter prompt</span>
@@ -294,31 +349,22 @@ function WhoWhatWherePlay({
               </li>
             ))}
           </ul>
-        )}
-      </section>
-
-      <section className="panel">
-        <h2>{stage === 'results' ? 'Resolved prompts' : 'Room focus'}</h2>
-        {stage === 'results' && results ? (
-          <ul className="player-list">
-            {results.turns.map((turn, index) => (
-              <li key={`${turn.playerId}-${turn.word}-${index}`} className="player-row">
-                <div className="player-row__identity">
-                  <span className="player-row__name">{playersById.get(turn.playerId)?.name ?? 'Player'}</span>
-                  <span className="helper-text">{turn.word}</span>
-                </div>
-                <span className={turn.outcome === 'guessed' ? 'badge badge--ready' : 'badge'}>
-                  {turn.outcome}
-                </span>
-              </li>
-            ))}
-          </ul>
         ) : (
-          <p className="helper-text">
-            Keep callouts moving. The active describer resolves the turn as soon as the room lands the word or decides to pass.
-          </p>
+          <p className="helper-text">Each resolved prompt will be recorded here.</p>
         )}
-      </section>
+      </DisclosurePanel>
+
+      <DisclosurePanel title="Players" description="Active turn ownership without crowding the main prompt area." summary={`${roomState.players.length} connected`}>
+        <GameplayPlayerList
+          players={roomState.players}
+          playerId={playerId}
+          hostId={roomState.hostId}
+          getStatus={(player) => ({
+            text: player.id === publicState.activePlayerId && stage === 'turn' ? 'Active' : 'Waiting',
+            tone: player.id === publicState.activePlayerId && stage === 'turn' ? 'ready' : 'default'
+          })}
+        />
+      </DisclosurePanel>
     </div>
   );
 }
@@ -340,8 +386,9 @@ function DrawingPad({ prompt, disabled, onSubmit }) {
 
     canvas.width = width * ratio;
     canvas.height = height * ratio;
-    canvas.style.width = `${width}px`;
-    canvas.style.height = `${height}px`;
+    canvas.style.width = '100%';
+    canvas.style.maxWidth = '420px';
+    canvas.style.height = 'auto';
 
     context.resetTransform?.();
     context.scale(ratio, ratio);
@@ -403,16 +450,22 @@ function DrawingPad({ prompt, disabled, onSubmit }) {
 
   return (
     <div className="field-stack">
-      <p className="stage-summary">Prompt: {prompt}</p>
-      <canvas
-        ref={canvasRef}
-        className="drawing-surface"
-        onPointerDown={handlePointerDown}
-        onPointerMove={handlePointerMove}
-        onPointerUp={endDrawing}
-        onPointerLeave={endDrawing}
-      />
-      <div className="actions">
+      <div className="role-card">
+        <span className="helper-text">Draw this prompt</span>
+        <strong className="role-card__title">{prompt}</strong>
+        <span className="role-card__body">Keep the sketch readable. The next player only sees your drawing.</span>
+      </div>
+      <div className="canvas-wrap">
+        <canvas
+          ref={canvasRef}
+          className="drawing-surface"
+          onPointerDown={handlePointerDown}
+          onPointerMove={handlePointerMove}
+          onPointerUp={endDrawing}
+          onPointerLeave={endDrawing}
+        />
+      </div>
+      <div className="actions actions--stretch">
         <button className="secondary-action" disabled={disabled} onClick={initializeCanvas}>
           Clear sketch
         </button>
@@ -429,57 +482,48 @@ function DrawNGuessPlay({
   roomState,
   privateState,
   playersById,
+  playerId,
   isHost,
   pendingAction,
   sendGameAction,
   returnRoomToLobby
 }) {
   const [guessText, setGuessText] = useState('');
-  const stage = roomState.gamePublicState?.stage;
-  const results = roomState.gamePublicState?.results;
+  const publicState = roomState.gamePublicState;
+  const stage = publicState?.stage;
+  const results = publicState?.results;
+  const activePlayerName = playersById.get(publicState.activePlayerId)?.name ?? 'Waiting';
 
   useEffect(() => {
     setGuessText('');
-  }, [stage, roomState.gamePublicState?.activePlayerId]);
+  }, [stage, publicState?.activePlayerId]);
 
   return (
-    <div className="gameplay-grid">
-      <section className="panel panel--hero">
-        <h2>Chain state</h2>
-        <div className="stat-row">
-          <span>Stage</span>
-          <span>{stage === 'results' ? 'Reveal' : stage === 'draw' ? 'Draw' : 'Guess'}</span>
+    <div className="gameplay-stack">
+      <section className="panel panel--hero panel--stacked gameplay-primary">
+        <div className="panel-heading">
+          <p className="status-pill">{stage === 'results' ? 'Reveal' : stage === 'draw' ? 'Draw step' : 'Guess step'}</p>
+          <h2>
+            {privateState?.mode === 'draw'
+              ? 'Draw the prompt'
+              : privateState?.mode === 'guess'
+                ? 'Guess the drawing'
+                : stage === 'results'
+                  ? 'Chain complete'
+                  : 'Waiting'}
+          </h2>
+          <p>Put the current task first and keep the reveal chain below the fold until it matters.</p>
         </div>
-        {stage !== 'results' && (
-          <>
-            <div className="stat-row">
-              <span>Active player</span>
-              <span>{playersById.get(roomState.gamePublicState.activePlayerId)?.name ?? 'Waiting'}</span>
-            </div>
-            <div className="stat-row">
-              <span>Step</span>
-              <span>
-                {roomState.gamePublicState.stageNumber} / {roomState.gamePublicState.totalStages}
-              </span>
-            </div>
-          </>
-        )}
-        <div className="stat-row">
-          <span>Submissions</span>
-          <span>{roomState.gamePublicState.submissions}</span>
-        </div>
-      </section>
 
-      <section className="panel">
-        <h2>
-          {privateState?.mode === 'draw'
-            ? 'Draw the prompt'
-            : privateState?.mode === 'guess'
-              ? 'Guess the drawing'
-              : stage === 'results'
-                ? 'Chain complete'
-                : 'Waiting'}
-        </h2>
+        <SummaryChips
+          items={[
+            { label: 'Active', value: activePlayerName },
+            stage !== 'results'
+              ? { label: 'Step', value: `${publicState.stageNumber} / ${publicState.totalStages}` }
+              : { label: 'Entries', value: results?.chain?.length ?? 0 },
+            { label: 'Submissions', value: publicState.submissions }
+          ]}
+        />
 
         {privateState?.mode === 'draw' && (
           <DrawingPad
@@ -491,7 +535,9 @@ function DrawNGuessPlay({
 
         {privateState?.mode === 'guess' && (
           <div className="field-stack">
-            <img className="drawing-preview" src={privateState.drawing} alt="Sketch to guess" />
+            <div className="canvas-wrap">
+              <img className="drawing-preview" src={privateState.drawing} alt="Sketch to guess" />
+            </div>
             <label>
               <span className="helper-text">What do you think this drawing says?</span>
               <input
@@ -508,26 +554,28 @@ function DrawNGuessPlay({
         )}
 
         {privateState?.mode === 'wait' && stage !== 'results' && (
-          <p className="helper-text">
-            {playersById.get(roomState.gamePublicState.activePlayerId)?.name ?? 'A player'} is on the current {stage} step.
-          </p>
+          <div className="notice-card">
+            <strong>{activePlayerName} is up</strong>
+            <p>{activePlayerName} is working through the current {stage} step.</p>
+          </div>
         )}
 
         {stage === 'results' && (
-          <>
-            <p className="stage-summary">The full chain is ready to review.</p>
-            <ResultsActions
-              isHost={isHost}
-              roomCode={roomCode}
-              onReturnToLobby={returnRoomToLobby}
-              pendingAction={pendingAction}
-            />
-          </>
+          <ResultsActions
+            isHost={isHost}
+            roomCode={roomCode}
+            onReturnToLobby={returnRoomToLobby}
+            pendingAction={pendingAction}
+          />
         )}
       </section>
 
-      <section className="panel chain-panel">
-        <h2>Reveal chain</h2>
+      <DisclosurePanel
+        title="Reveal chain"
+        description="Collapsed during play so the current action stays visible first on mobile."
+        summary={results ? `${results.chain.length} entries` : 'Pending'}
+        defaultOpen={stage === 'results'}
+      >
         {results ? (
           <div className="results-chain">
             {results.chain.map((entry, index) => (
@@ -547,25 +595,21 @@ function DrawNGuessPlay({
             ))}
           </div>
         ) : (
-          <p className="helper-text">The finished prompt chain will appear here once everyone has taken a turn.</p>
+          <p className="helper-text">The finished prompt chain appears here once the round is complete.</p>
         )}
-      </section>
+      </DisclosurePanel>
 
-      <section className="panel">
-        <h2>Players</h2>
-        <ul className="player-list">
-          {roomState.players.map((player) => (
-            <li key={player.id} className="player-row">
-              <div className="player-row__identity">
-                <span className="player-row__name">{player.name}</span>
-              </div>
-              <span className="badge">
-                {player.id === roomState.gamePublicState.activePlayerId && stage !== 'results' ? 'Active' : 'Waiting'}
-              </span>
-            </li>
-          ))}
-        </ul>
-      </section>
+      <DisclosurePanel title="Players" description="See whose turn it is without crowding the drawing or guessing area." summary={`${roomState.players.length} connected`}>
+        <GameplayPlayerList
+          players={roomState.players}
+          playerId={playerId}
+          hostId={roomState.hostId}
+          getStatus={(player) => ({
+            text: player.id === publicState.activePlayerId && stage !== 'results' ? 'Active' : 'Waiting',
+            tone: player.id === publicState.activePlayerId && stage !== 'results' ? 'ready' : 'default'
+          })}
+        />
+      </DisclosurePanel>
     </div>
   );
 }
@@ -636,11 +680,11 @@ export function GamePlayScreen() {
 
   return (
     <main className="scene scene--gameplay">
-      <header className="scene__header">
+      <header className="scene__header scene__header--compact">
         <p className="scene__eyebrow">{game.name} in play</p>
         <h1 className="scene__title">Room {roomState.code}</h1>
         <p className="scene__lead">
-          Each game now runs its own live round flow from active turns through results.
+          The primary move stays above the fold. Logs, rosters, and reveal data are still there, just no longer competing for attention.
         </p>
       </header>
 
@@ -664,6 +708,7 @@ export function GamePlayScreen() {
           roomState={roomState}
           privateState={privateState}
           playersById={playersById}
+          playerId={playerId}
           isHost={isHost}
           pendingAction={pendingAction}
           sendGameAction={sendGameAction}
@@ -677,6 +722,7 @@ export function GamePlayScreen() {
           roomState={roomState}
           privateState={privateState}
           playersById={playersById}
+          playerId={playerId}
           isHost={isHost}
           pendingAction={pendingAction}
           sendGameAction={sendGameAction}

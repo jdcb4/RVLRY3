@@ -23,7 +23,18 @@ export function PlayShell() {
 
   return (
     <PlaySessionProvider game={game}>
-      <Outlet />
+      <div className="play-shell">
+        <header className="topbar">
+          <Link className="topbar__brand" to="/">
+            RVLRY
+          </Link>
+          <div className="topbar__meta">
+            <span className="topbar__pill">{game.name}</span>
+            <span className="topbar__pill topbar__pill--muted">Online flow</span>
+          </div>
+        </header>
+        <Outlet />
+      </div>
     </PlaySessionProvider>
   );
 }

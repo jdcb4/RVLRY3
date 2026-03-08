@@ -19,7 +19,7 @@ export function GameLobbyScreen() {
     setReady,
     startGame
   } = usePlaySession();
-  const [copyStatus, setCopyStatus] = useState('');
+  const [shareStatus, setShareStatus] = useState('');
 
   useEffect(() => {
     let ignore = false;
@@ -79,14 +79,34 @@ export function GameLobbyScreen() {
     return `${readyCount} / ${roomState.players.length} ready`;
   }, [game.minPlayers, readyCount, roomState]);
 
-  const handleCopyCode = async () => {
+  const flashStatus = (message) => {
+    setShareStatus(message);
+    window.setTimeout(() => setShareStatus(''), 1800);
+  };
+
+  const handleCopy = async (value, successMessage) => {
     try {
-      await navigator.clipboard.writeText(inviteLink);
-      setCopyStatus('Invite link copied');
-      window.setTimeout(() => setCopyStatus(''), 1800);
+      await navigator.clipboard.writeText(value);
+      flashStatus(successMessage);
     } catch {
-      setCopyStatus('Copy failed');
-      window.setTimeout(() => setCopyStatus(''), 1800);
+      flashStatus('Copy failed');
+    }
+  };
+
+  const handleShareInvite = async () => {
+    if (!navigator.share) {
+      return;
+    }
+
+    try {
+      await navigator.share({
+        title: `Join ${game.name}`,
+        text: `Join my ${game.name} room on RVLRY`,
+        url: inviteLink
+      });
+      flashStatus('Share sheet opened');
+    } catch {
+      // User cancelled or share failed; keep the UI quiet.
     }
   };
 
@@ -113,44 +133,77 @@ export function GameLobbyScreen() {
 
   return (
     <main className="scene scene--lobby">
-      <header className="scene__header">
+      <header className="scene__header scene__header--compact">
         <p className="scene__eyebrow">{game.name} lobby</p>
         <h1 className="scene__title">{lobbyHeading}</h1>
         <p className="scene__lead">
-          Use the lobby to confirm the roster, share the invite, and make sure everyone is ready
-          before the host starts the round.
+          Keep the lobby focused: share the room, confirm the roster, and start only when everyone is set.
         </p>
       </header>
 
-      <div className="panel-grid">
-        <section className="panel panel--hero">
-          <p className={allPlayersReady ? 'status-pill' : 'status-pill status-pill--muted'}>
-            {readinessLabel}
-          </p>
-          <div className="stat-row">
-            <span>Invite link</span>
-            <button className="secondary-action" onClick={handleCopyCode}>
-              Copy
+      <div className="panel-grid panel-grid--lobby">
+        <section className="panel panel--hero panel--stacked">
+          <div className="panel-heading">
+            <p className={allPlayersReady ? 'status-pill' : 'status-pill status-pill--muted'}>
+              {readinessLabel}
+            </p>
+            <h2>Invite players</h2>
+            <p>Use the room code for quick verbal sharing or send the direct join link from your phone.</p>
+          </div>
+
+          <div className="room-code-card">
+            <span className="helper-text">Room code</span>
+            <strong className="room-code-card__value">{roomState.code}</strong>
+          </div>
+
+          <div className="actions actions--stretch">
+            <button className="secondary-action" onClick={() => handleCopy(roomState.code, 'Room code copied')}>
+              Copy code
             </button>
+            <button className="secondary-action" onClick={() => handleCopy(inviteLink, 'Invite link copied')}>
+              Copy link
+            </button>
+            {navigator.share && (
+              <button className="secondary-action" onClick={handleShareInvite}>
+                Share invite
+              </button>
+            )}
           </div>
-          <div className="hero-strip">
-            <strong>{inviteLink}</strong>
-            <p>Share this link or the room code with anyone joining from another device.</p>
-            {copyStatus && <p>{copyStatus}</p>}
+
+          <div className="invite-link-card">
+            <span className="helper-text">Direct join link</span>
+            <p className="invite-link">{inviteLink}</p>
           </div>
-          <ul className="meta-list">
-            <li>Minimum players: {game.minPlayers}</li>
-            <li>Room code: {roomState.code}</li>
-            <li>{isHost ? 'You control the start button.' : 'Only the host can start the round.'}</li>
-          </ul>
+
+          {shareStatus && <p className="connection-banner">{shareStatus}</p>}
+
+          <div className="summary-chips">
+            <div className="summary-chip">
+              <span className="summary-chip__label">Minimum</span>
+              <strong className="summary-chip__value">{game.minPlayers} players</strong>
+            </div>
+            <div className="summary-chip">
+              <span className="summary-chip__label">Ready</span>
+              <strong className="summary-chip__value">{readyCount}</strong>
+            </div>
+            <div className="summary-chip">
+              <span className="summary-chip__label">Host</span>
+              <strong className="summary-chip__value">{isHost ? 'You' : roomState.players.find((player) => player.id === roomState.hostId)?.name ?? 'Assigned'}</strong>
+            </div>
+          </div>
         </section>
 
-        <section className="panel">
-          <h2>Players</h2>
+        <section className="panel panel--stacked">
+          <div className="panel-heading">
+            <h2>Players</h2>
+            <p>{isHost ? 'You control the start once the room is ready.' : 'Only the host can launch the round.'}</p>
+          </div>
+
           {error && <p className="connection-banner connection-banner--error">{error}</p>}
+
           <ul className="player-list">
             {roomState.players.map((player) => (
-              <li key={player.id} className="player-row">
+              <li key={player.id} className="player-row player-row--compact">
                 <div className="player-row__identity">
                   <span className="player-row__name">{player.name}</span>
                   <div className="player-row__meta">
@@ -158,34 +211,36 @@ export function GameLobbyScreen() {
                     {player.id === roomState.hostId && <span className="badge badge--host">Host</span>}
                   </div>
                 </div>
-                <div className="player-row__status">
-                  <span className={player.ready ? 'badge badge--ready' : 'badge'}>
-                    {player.ready ? 'Ready' : 'Waiting'}
-                  </span>
-                </div>
+                <span className={player.ready ? 'badge badge--ready' : 'badge'}>
+                  {player.ready ? 'Ready' : 'Waiting'}
+                </span>
               </li>
             ))}
           </ul>
-
-          <div className="actions">
-            <button disabled={!currentPlayer || pendingAction === 'ready'} onClick={handleReadyToggle}>
-              {currentPlayer?.ready ? 'Mark not ready' : 'Mark ready'}
-            </button>
-            {isHost && (
-              <button disabled={!canStart || pendingAction === 'start'} onClick={handleStartGame}>
-                Start game
-              </button>
-            )}
-          </div>
-
-          {!isHost && <p className="helper-text">The host starts the round once everyone is ready.</p>}
-
-          <div className="actions">
-            <Link className="button-link button-link--secondary" to={`/play/${game.id}`}>
-              Back to landing
-            </Link>
-          </div>
         </section>
+      </div>
+
+      <div className="action-bar">
+        <div className="action-bar__meta">
+          <strong>{currentPlayer?.ready ? 'You are ready' : 'Mark ready when you are set'}</strong>
+          <span>{readinessLabel}</span>
+        </div>
+        <div className="action-bar__actions">
+          <button disabled={!currentPlayer || pendingAction === 'ready'} onClick={handleReadyToggle}>
+            {currentPlayer?.ready ? 'Not ready' : 'Ready'}
+          </button>
+          {isHost && (
+            <button disabled={!canStart || pendingAction === 'start'} onClick={handleStartGame}>
+              Start game
+            </button>
+          )}
+        </div>
+      </div>
+
+      <div className="actions">
+        <Link className="button-link button-link--secondary" to={`/play/${game.id}`}>
+          Back to landing
+        </Link>
       </div>
     </main>
   );
