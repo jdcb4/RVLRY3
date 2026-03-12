@@ -395,13 +395,15 @@ summary:focus-visible {
 }
 
 .team-grid,
-.settings-grid {
+.settings-grid,
+.local-player-grid {
   display: grid;
   gap: 1rem;
 }
 
 .team-card,
-.settings-card {
+.settings-card,
+.local-player-card {
   display: grid;
   gap: 1rem;
   padding: 1rem;
@@ -432,6 +434,16 @@ summary:focus-visible {
   color: var(--muted);
 }
 
+.local-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.local-toolbar > * {
+  flex: 1 1 12rem;
+}
+
 .settings-field {
   display: grid;
   gap: 0.4rem;
@@ -458,6 +470,11 @@ summary:focus-visible {
 .notice-card--focus {
   background: rgba(255, 138, 91, 0.08);
   border-color: rgba(255, 138, 91, 0.22);
+}
+
+.local-handoff {
+  min-height: 10rem;
+  align-content: center;
 }
 
 .turn-hero {
@@ -827,12 +844,14 @@ summary:focus-visible {
 
 @media (min-width: 900px) {
   .panel-grid--landing,
-  .panel-grid--lobby {
+  .panel-grid--lobby,
+  .panel-grid--local {
     grid-template-columns: minmax(0, 1.05fr) minmax(320px, 0.95fr);
   }
 
   .team-grid,
-  .settings-grid {
+  .settings-grid,
+  .local-player-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
@@ -920,6 +939,10 @@ summary:focus-visible {
   .team-card__header,
   .team-card__title-row {
     align-items: stretch;
+    flex-direction: column;
+  }
+
+  .local-toolbar {
     flex-direction: column;
   }
 

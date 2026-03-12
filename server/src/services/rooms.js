@@ -8,7 +8,6 @@ import {
   getWordTypeForGame
 } from './gameEngines/index.js';
 
-const rooms = new Map();
 const ROOM_REJOIN_WINDOW_MS = 2 * 60 * 1000;
 
 const randomCode = () => Math.random().toString(36).slice(2, 8).toUpperCase();
@@ -68,7 +67,7 @@ const clearRoomGameTimer = (room) => {
   }
 };
 
-const scheduleRoomExpiry = (room) => {
+const scheduleRoomExpiry = (rooms, room) => {
   clearRoomExpiry(room);
   room.expiryTimer = setTimeout(() => {
     clearRoomGameTimer(room);
@@ -96,7 +95,7 @@ const emitRoomUpdate = (io, room) => {
   io.to(room.code).emit('room:update', sanitizeRoom(room));
 };
 
-const ensureUniqueCode = () => {
+const ensureUniqueCode = (rooms) => {
   let code = randomCode();
   while (rooms.has(code)) {
     code = randomCode();
@@ -146,14 +145,14 @@ const syncHost = (room) => {
   room.hostId = room.players[0]?.id ?? room.hostId;
 };
 
-const maybeDeleteRoom = (room) => {
+const maybeDeleteRoom = (rooms, room) => {
   if (room.players.length > 0) {
     clearRoomExpiry(room);
     return;
   }
 
   if (room.rejoinSlots.size > 0) {
-    scheduleRoomExpiry(room);
+    scheduleRoomExpiry(rooms, room);
     return;
   }
 
@@ -235,7 +234,7 @@ const applyWhoWhatWhereTeamCount = (room, nextTeamCount) => {
   }
 };
 
-const scheduleWhoWhatWhereTurnExpiry = (io, room, wordStore) => {
+const scheduleWhoWhatWhereTurnExpiry = (rooms, io, room, wordStore) => {
   clearRoomGameTimer(room);
 
   if (!isWhoWhatWhereRoom(room) || room.phase !== 'in-progress' || room.gamePublicState?.stage !== 'turn') {
@@ -293,7 +292,7 @@ const scheduleWhoWhatWhereTurnExpiry = (io, room, wordStore) => {
     }
 
     emitRoomUpdate(io, room);
-    scheduleWhoWhatWhereTurnExpiry(io, room, wordStore);
+    scheduleWhoWhatWhereTurnExpiry(rooms, io, room, wordStore);
   }, delay + 25);
 };
 
@@ -348,6 +347,8 @@ const resetRoomToLobby = (room) => {
 };
 
 export function registerRoomHandlers(io, wordStore) {
+  const rooms = new Map();
+
   io.on('connection', (socket) => {
     socket.on('room:create', ({ gameId, playerName, playerToken }, callback) => {
       if (!playerToken) {
@@ -355,7 +356,7 @@ export function registerRoomHandlers(io, wordStore) {
         return;
       }
 
-      const code = ensureUniqueCode();
+      const code = ensureUniqueCode(rooms);
       const player = createPlayer({
         playerToken,
         playerName,
@@ -639,7 +640,7 @@ export function registerRoomHandlers(io, wordStore) {
         room.teams = teams;
       }
 
-      scheduleWhoWhatWhereTurnExpiry(io, room, wordStore);
+      scheduleWhoWhatWhereTurnExpiry(rooms, io, room, wordStore);
 
       for (const roomPlayer of room.players) {
         emitPrivateState(io, room, roomPlayer);
@@ -691,7 +692,7 @@ export function registerRoomHandlers(io, wordStore) {
         room.teams = result.teams;
       }
 
-      scheduleWhoWhatWhereTurnExpiry(io, room, wordStore);
+      scheduleWhoWhatWhereTurnExpiry(rooms, io, room, wordStore);
 
       for (const roomPlayer of room.players) {
         emitPrivateState(io, room, roomPlayer);
@@ -735,7 +736,7 @@ export function registerRoomHandlers(io, wordStore) {
         movePlayerToRejoinSlots(room, player);
         syncHost(room);
         emitRoomUpdate(io, room);
-        maybeDeleteRoom(room);
+        maybeDeleteRoom(rooms, room);
       }
     });
   });

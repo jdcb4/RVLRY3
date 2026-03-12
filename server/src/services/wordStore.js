@@ -207,6 +207,8 @@ export function createWordStore({ cacheFilePath = DEFAULT_CACHE_PATH } = {}) {
     return words[Math.floor(Math.random() * words.length)];
   };
 
+  const getWords = (type) => [...(wordsByType.get(type) ?? [])];
+
   const getCategories = (type) =>
     [...new Set((recordsByType.get(type) ?? []).map((record) => record.category).filter(Boolean))];
 
@@ -223,6 +225,7 @@ export function createWordStore({ cacheFilePath = DEFAULT_CACHE_PATH } = {}) {
 
   return {
     getRandomWord,
+    getWords,
     getCategories,
     getWordsForCategory,
     initialize,

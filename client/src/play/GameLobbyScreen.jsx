@@ -46,8 +46,11 @@ function TeamCard({
   pendingAction,
   teamNameDraft,
   setTeamNameDraft,
-  onSaveTeamName
+  onSaveTeamName,
+  onAssignTeam
 }) {
+  const isCurrentTeam = currentPlayer?.teamId === team.id;
+
   return (
     <article className="team-card">
       <div className="team-card__header">
@@ -69,7 +72,10 @@ function TeamCard({
         ) : (
           <h3>{team.name}</h3>
         )}
-        <span className="badge">{team.score} pts</span>
+        <div className="player-row__meta">
+          <span className="badge">{team.score} pts</span>
+          {isCurrentTeam && <span className="badge badge--self">Your team</span>}
+        </div>
       </div>
 
       <ul className="player-list">
@@ -91,6 +97,16 @@ function TeamCard({
           <li className="team-card__empty">No players yet</li>
         )}
       </ul>
+
+      {currentPlayer && !isCurrentTeam && (
+        <button
+          className="secondary-action"
+          disabled={pendingAction === 'assign-team'}
+          onClick={() => onAssignTeam(roomCode, team.id)}
+        >
+          Join {team.name}
+        </button>
+      )}
     </article>
   );
 }
@@ -106,7 +122,9 @@ function WhoWhatWhereLobby({
   settingsForm,
   updateSetting,
   updateTeamName,
-  error
+  assignTeam,
+  error,
+  startWarning
 }) {
   const teamRosters = useMemo(() => buildTeamRosters(roomState), [roomState]);
 
@@ -117,6 +135,7 @@ function WhoWhatWhereLobby({
       </div>
 
       {error && <p className="connection-banner connection-banner--error">{error}</p>}
+      {startWarning && <p className="connection-banner connection-banner--error">{startWarning}</p>}
 
       <div className="team-grid">
         {teamRosters.map((team) => (
@@ -130,6 +149,7 @@ function WhoWhatWhereLobby({
             teamNameDraft={teamNameDrafts[team.id] ?? team.name}
             setTeamNameDraft={setTeamNameDraft}
             onSaveTeamName={updateTeamName}
+            onAssignTeam={assignTeam}
           />
         ))}
       </div>
@@ -213,7 +233,7 @@ function WhoWhatWhereLobby({
   );
 }
 
-function StandardLobby({ roomState, playerId, currentPlayer, isHost, pendingAction, handleReadyToggle, handleStartGame, error }) {
+function StandardLobby({ roomState, playerId, error, startWarning }) {
   return (
     <section className="panel panel--stacked">
       <div className="panel-heading">
@@ -221,6 +241,7 @@ function StandardLobby({ roomState, playerId, currentPlayer, isHost, pendingActi
       </div>
 
       {error && <p className="connection-banner connection-banner--error">{error}</p>}
+      {startWarning && <p className="connection-banner connection-banner--error">{startWarning}</p>}
 
       <ul className="player-list">
         {roomState.players.map((player) => (
@@ -238,17 +259,6 @@ function StandardLobby({ roomState, playerId, currentPlayer, isHost, pendingActi
           </li>
         ))}
       </ul>
-
-      <div className="actions actions--stretch">
-        <button disabled={!currentPlayer || pendingAction === 'ready'} onClick={handleReadyToggle}>
-          {currentPlayer?.ready ? 'Not ready' : 'Ready'}
-        </button>
-        {isHost && (
-          <button disabled={pendingAction === 'start'} onClick={handleStartGame}>
-            Start game
-          </button>
-        )}
-      </div>
     </section>
   );
 }
@@ -302,6 +312,7 @@ export function GameLobbyScreen() {
     error,
     pendingAction,
     ensureRoom,
+    assignTeam,
     updateTeamName,
     updateRoomSettings,
     setReady,
@@ -520,17 +531,15 @@ export function GameLobbyScreen() {
             updateSetting={handleUpdateSetting}
             updateTeamName={updateTeamName}
             error={error}
+            assignTeam={assignTeam}
+            startWarning={startWarning}
           />
         ) : (
           <StandardLobby
             roomState={roomState}
             playerId={playerId}
-            currentPlayer={currentPlayer}
-            isHost={isHost}
-            pendingAction={pendingAction}
-            handleReadyToggle={handleReadyToggle}
-            handleStartGame={handleStartGame}
             error={error}
+            startWarning={startWarning}
           />
         )}
       </div>
