@@ -1,10 +1,11 @@
-import { act, render, screen } from '@testing-library/react';
+import { act, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { DrawNGuessLocalView } from '../components/local/DrawNGuessLocalView';
 import { ImposterLocalView } from '../components/local/ImposterLocalView';
 import { WhoWhatWhereLocalView } from '../components/local/WhoWhatWhereLocalView';
+import { HatGamePlay } from './gameplay/HatGamePlay';
 import { WhoWhatWherePlay } from './gameplay/WhoWhatWherePlay';
 import {
   applyLocalAction,
@@ -30,10 +31,10 @@ vi.mock('../audio/useGameAudio', () => ({
 
 const mockedUsePlaySession = vi.mocked(usePlaySession);
 
-const renderLobbyScreen = () =>
+const renderLobbyScreen = (initialEntry = '/play/whowhatwhere/lobby/ROOM42') =>
   render(
     <MemoryRouter
-      initialEntries={['/play/whowhatwhere/lobby/ROOM42']}
+      initialEntries={[initialEntry]}
       future={{ v7_startTransition: true, v7_relativeSplatPath: true }}
     >
       <Routes>
@@ -83,8 +84,10 @@ describe('play UI', () => {
         ]
       },
       lobbyPrivateState: null,
+      roomExitNotice: null,
       error: '',
       setError: vi.fn(),
+      clearRoomExitNotice: vi.fn(),
       pendingAction: '',
       ensureRoom: vi.fn(),
       assignTeam: vi.fn(),
@@ -92,6 +95,7 @@ describe('play UI', () => {
       rebalanceTeams,
       updateRoomSettings: vi.fn(),
       submitHatClues: vi.fn(),
+      kickPlayer: vi.fn(),
       setReady: vi.fn(),
       startGame: vi.fn()
     });
@@ -275,10 +279,92 @@ describe('play UI', () => {
 
     renderLobbyScreen();
 
-    await user.click(screen.getByText('Team options'));
+    await user.click(screen.getByText('Options'));
     await user.click(screen.getByRole('button', { name: 'Rebalance teams' }));
 
     expect(rebalanceTeams).toHaveBeenCalledWith('ROOM42');
+  });
+
+  it('keeps HatGame team controls collapsed and lets the host remove players', async () => {
+    const user = userEvent.setup();
+    const kickPlayer = vi.fn().mockResolvedValue({ ok: true });
+
+    mockedUsePlaySession.mockReturnValue({
+      game: {
+        id: 'hatgame',
+        name: 'HatGame',
+        minPlayers: 4
+      },
+      playerName: 'Alex',
+      playerId: 'p1',
+      currentPlayer: { id: 'p1', name: 'Alex', ready: true, teamId: 'team-1' },
+      roomState: {
+        code: 'ROOM42',
+        phase: 'lobby',
+        hostId: 'p1',
+        settings: {
+          teamCount: 2,
+          turnDurationSeconds: 45,
+          cluesPerPlayer: 6,
+          skipsPerTurn: 1
+        },
+        lobbyState: {
+          requiredCluesPerPlayer: 6,
+          clueCountsByPlayerId: {
+            p1: 6,
+            p2: 6,
+            p3: 6,
+            p4: 6
+          }
+        },
+        teams: [
+          { id: 'team-1', name: 'Team Alpha', score: 0, captainId: 'p1' },
+          { id: 'team-2', name: 'Team Bravo', score: 0, captainId: 'p3' }
+        ],
+        players: [
+          { id: 'p1', name: 'Alex', ready: true, teamId: 'team-1', seat: 0 },
+          { id: 'p2', name: 'Blair', ready: false, teamId: 'team-1', seat: 1 },
+          { id: 'p3', name: 'Casey', ready: true, teamId: 'team-2', seat: 2 },
+          { id: 'p4', name: 'Drew', ready: false, teamId: 'team-2', seat: 3 }
+        ]
+      },
+      lobbyPrivateState: {
+        submittedCount: 6,
+        clues: ['A', 'B', 'C', 'D', 'E', 'F'],
+        hasSubmitted: true
+      },
+      roomExitNotice: null,
+      error: '',
+      setError: vi.fn(),
+      clearRoomExitNotice: vi.fn(),
+      pendingAction: '',
+      ensureRoom: vi.fn(),
+      assignTeam: vi.fn(),
+      updateTeamName: vi.fn(),
+      rebalanceTeams: vi.fn(),
+      updateRoomSettings: vi.fn(),
+      submitHatClues: vi.fn(),
+      kickPlayer,
+      setReady: vi.fn(),
+      startGame: vi.fn()
+    });
+
+    renderLobbyScreen('/play/hatgame/lobby/ROOM42');
+
+    const teamsSummary = screen.getByRole('heading', { name: 'Teams' }).closest('summary');
+    const teamsDisclosure = teamsSummary?.closest('details');
+
+    expect(teamsDisclosure?.hasAttribute('open')).toBe(false);
+
+    await user.click(teamsSummary);
+
+    expect(teamsDisclosure?.hasAttribute('open')).toBe(true);
+    expect(screen.getByRole('button', { name: 'Edit Team Alpha' })).toBeTruthy();
+    expect(screen.getByRole('img', { name: 'Alex ready' })).toBeTruthy();
+
+    await user.click(screen.getByRole('button', { name: 'Remove Drew' }));
+
+    expect(kickPlayer).toHaveBeenCalledWith('ROOM42', 'p4');
   });
 
   it('keeps team scoreboard context collapsed until requested in team gameplay', async () => {
@@ -338,5 +424,83 @@ describe('play UI', () => {
 
     expect(scoreboardDisclosure?.hasAttribute('open')).toBe(true);
     expect(screen.getByText('Latest turn')).toBeTruthy();
+  });
+
+  it('shows HatGame rules separately from the clue card and lets the describer return skipped clues', async () => {
+    const user = userEvent.setup();
+    const sendGameAction = vi.fn();
+
+    render(
+      <HatGamePlay
+        roomCode="ROOM42"
+        roomState={{
+          hostId: 'p1',
+          players: [
+            { id: 'p1', name: 'Alex', teamId: 'team-1' },
+            { id: 'p2', name: 'Blair', teamId: 'team-1' },
+            { id: 'p3', name: 'Casey', teamId: 'team-2' },
+            { id: 'p4', name: 'Drew', teamId: 'team-2' }
+          ],
+          teams: [
+            { id: 'team-1', name: 'Team 1', score: 2 },
+            { id: 'team-2', name: 'Team 2', score: 1 }
+          ],
+          gamePublicState: {
+            stage: 'turn',
+            roundNumber: 1,
+            phaseNumber: 1,
+            phaseName: 'Describe',
+            phaseInstruction: 'Use as many words as you want, but do not say any part of the name.',
+            activeTeamId: 'team-1',
+            activeDescriberId: 'p1',
+            activeDescriberName: 'Alex',
+            turn: {
+              endsAt: new Date(Date.now() + 30_000).toISOString(),
+              score: 2,
+              correctCount: 2,
+              skipsRemaining: 0,
+              skippedCluePending: true
+            }
+          }
+        }}
+        privateState={{
+          teamId: 'team-1',
+          isActiveTeam: true,
+          isDescriber: true,
+          clue: 'Batman',
+          skipsRemaining: 0,
+          skippedCluePending: true,
+          skippedClueText: 'Batman',
+          canSkip: false,
+          canReturnSkippedClue: true
+        }}
+        playerId="p1"
+        isHost
+        pendingAction=""
+        sendGameAction={sendGameAction}
+        returnRoomToLobby={vi.fn()}
+      />
+    );
+
+    const currentRuleCard = screen.getByText('Current rule').closest('.notice-card');
+    const currentClueCard = screen.getByText('Current clue').closest('.role-card');
+
+    expect(currentRuleCard).toBeTruthy();
+    expect(
+      within(currentRuleCard).getByText(
+        'Use as many words as you want, but do not say any part of the name.'
+      )
+    ).toBeTruthy();
+    expect(currentClueCard).toBeTruthy();
+    expect(
+      within(currentClueCard).queryByText(
+        'Use as many words as you want, but do not say any part of the name.'
+      )
+    ).toBeNull();
+    expect(screen.queryByText('A skipped clue must come back before you can skip again.')).toBeNull();
+
+    await user.click(screen.getByRole('button', { name: 'Go back to skipped clue' }));
+
+    expect(sendGameAction).toHaveBeenCalledWith('ROOM42', 'return-skipped-clue');
   });
 });

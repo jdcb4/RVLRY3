@@ -1,9 +1,10 @@
-import { useEffect, useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeftIcon, InfoIcon, PhoneIcon } from '../components/Icons';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
+import { ArrowLeftIcon, InfoIcon } from '../components/Icons';
 import { usePlaySession } from './PlaySessionContext';
 
 export function GameLanding() {
+  const location = useLocation();
   const navigate = useNavigate();
   const { roomCode: inviteRoomCode } = useParams();
   const {
@@ -19,11 +20,30 @@ export function GameLanding() {
     createRoom,
     joinRoom
   } = usePlaySession();
-  const [joinCode, setJoinCode] = useState(inviteRoomCode ?? '');
+  const [toastMessage, setToastMessage] = useState('');
+  const autoJoinAttemptedRef = useRef(false);
 
   useEffect(() => {
-    setJoinCode(inviteRoomCode ?? '');
+    autoJoinAttemptedRef.current = false;
   }, [inviteRoomCode]);
+
+  useEffect(() => {
+    if (!location.state?.toastMessage) {
+      return;
+    }
+
+    setToastMessage(location.state.toastMessage);
+    navigate(location.pathname, { replace: true, state: null });
+  }, [location.pathname, location.state, navigate]);
+
+  useEffect(() => {
+    if (!toastMessage) {
+      return undefined;
+    }
+
+    const timeoutId = window.setTimeout(() => setToastMessage(''), 2200);
+    return () => window.clearTimeout(timeoutId);
+  }, [toastMessage]);
 
   const currentRoomTarget =
     roomState?.code && roomState.gameId === game.id
@@ -32,19 +52,32 @@ export function GameLanding() {
         : `/play/${game.id}/lobby/${roomState.code}`
       : null;
 
-  const handleCreateRoom = async () => {
+  const handleCreateRoom = useCallback(async () => {
     const response = await createRoom();
     if (response.code) {
       navigate(`/play/${game.id}/lobby/${response.code}`);
     }
-  };
+  }, [createRoom, game.id, navigate]);
 
-  const handleJoinRoom = async (nextCode = joinCode) => {
-    const response = await joinRoom(nextCode);
+  const handleJoinRoom = useCallback(async (code = inviteRoomCode) => {
+    const response = await joinRoom(code);
     if (response.code) {
       navigate(`/play/${game.id}/lobby/${response.code}`);
     }
-  };
+  }, [game.id, inviteRoomCode, joinRoom, navigate]);
+
+  useEffect(() => {
+    if (!inviteRoomCode || !location.state?.autoJoin || autoJoinAttemptedRef.current) {
+      return;
+    }
+
+    if (!playerName.trim()) {
+      return;
+    }
+
+    autoJoinAttemptedRef.current = true;
+    handleJoinRoom(inviteRoomCode);
+  }, [handleJoinRoom, inviteRoomCode, location.state, playerName]);
 
   return (
     <main className="scene scene--landing">
@@ -64,8 +97,8 @@ export function GameLanding() {
       <div className="panel-grid panel-grid--landing">
         <section className="panel panel--hero panel--stacked">
           <div className="panel-heading">
-            <h2>{inviteRoomCode ? `Join ${inviteRoomCode}` : 'Play online'}</h2>
-            <p>Set your name, then create a room or enter a code.</p>
+            <h2>{inviteRoomCode ? `Join ${inviteRoomCode}` : 'Host online'}</h2>
+            <p>{inviteRoomCode ? 'Set your name, then join this room.' : 'Create a fresh room for this game.'}</p>
           </div>
 
           {currentRoomTarget ? (
@@ -80,7 +113,7 @@ export function GameLanding() {
             </div>
           ) : null}
 
-          {!currentRoomTarget && lastRoomCode ? (
+          {!inviteRoomCode && !currentRoomTarget && lastRoomCode ? (
             <div className="notice-card">
               <strong>Quick rejoin</strong>
               <div className="actions">
@@ -91,42 +124,30 @@ export function GameLanding() {
             </div>
           ) : null}
 
-          <div className="field-stack">
-            <label className="settings-field">
-              <span className="helper-text">Name</span>
-              <input
-                placeholder="Player name"
-                value={playerName}
-                onChange={(event) => {
-                  setError('');
-                  setPlayerName(event.target.value);
-                }}
-              />
-            </label>
+          <label className="settings-field">
+            <span className="helper-text">Name</span>
+            <input
+              placeholder="Player name"
+              value={playerName}
+              onChange={(event) => {
+                setError('');
+                setPlayerName(event.target.value);
+              }}
+            />
+          </label>
 
-            <label className="settings-field">
-              <span className="helper-text">Room code</span>
-              <input
-                placeholder="Six-character code"
-                value={joinCode}
-                maxLength={6}
-                onChange={(event) => {
-                  setError('');
-                  setJoinCode(event.target.value.toUpperCase());
-                }}
-              />
-            </label>
-          </div>
-
-          {error && <p className="connection-banner connection-banner--error">{error}</p>}
+          {error ? <p className="connection-banner connection-banner--error">{error}</p> : null}
 
           <div className="actions actions--stretch">
-            <button disabled={pendingAction === 'create'} onClick={handleCreateRoom}>
-              Create room
-            </button>
-            <button className="secondary-action" disabled={pendingAction === 'join'} onClick={() => handleJoinRoom()}>
-              Join room
-            </button>
+            {inviteRoomCode ? (
+              <button disabled={pendingAction === 'join'} onClick={() => handleJoinRoom(inviteRoomCode)}>
+                Join room
+              </button>
+            ) : (
+              <button disabled={pendingAction === 'create'} onClick={handleCreateRoom}>
+                Create room
+              </button>
+            )}
           </div>
         </section>
 
@@ -154,36 +175,10 @@ export function GameLanding() {
               </ol>
             </div>
           </details>
-
-          {game.supportsLocal ? (
-            <details className="disclosure">
-              <summary className="disclosure__summary">
-                <div className="disclosure__summary-copy">
-                  <div className="disclosure__summary-title">
-                    <span className="disclosure__icon">
-                      <PhoneIcon />
-                    </span>
-                    <h2>Pass and play</h2>
-                  </div>
-                  <p>Single-phone setup</p>
-                </div>
-              </summary>
-              <div className="disclosure__body">
-                <div className="notice-card">
-                  <strong>Local mode</strong>
-                  <p>Use one phone, pass it between turns, and keep hidden information protected.</p>
-                </div>
-                <div className="actions">
-                  <Link className="button-link button-link--secondary" to={`/local/${game.id}`}>
-                    <PhoneIcon />
-                    Open local mode
-                  </Link>
-                </div>
-              </div>
-            </details>
-          ) : null}
         </section>
       </div>
+
+      {toastMessage ? <p className="toast">{toastMessage}</p> : null}
     </main>
   );
 }

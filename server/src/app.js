@@ -4,7 +4,7 @@ import { createServer } from 'node:http';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Server } from 'socket.io';
-import { registerRoomHandlers } from './services/rooms.js';
+import { lookupRoomSummary, registerRoomHandlers } from './services/rooms.js';
 import { wordsRouter } from './routes/words.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -20,7 +20,18 @@ export function createAppServer({
   app.use(cors());
   app.use(express.json());
 
+  const rooms = new Map();
+
   app.use('/api/words', wordsRouter(wordStore));
+  app.get('/api/rooms/:code', (req, res) => {
+    const room = lookupRoomSummary(rooms, req.params.code);
+    if (!room) {
+      res.status(404).json({ error: 'Room not found' });
+      return;
+    }
+
+    res.json(room);
+  });
   app.get('/api/health', (_, res) => {
     res.json({ ok: true });
   });
@@ -44,7 +55,7 @@ export function createAppServer({
     }
   });
 
-  registerRoomHandlers(io, wordStore);
+  registerRoomHandlers(io, wordStore, { rooms });
 
   return {
     app,

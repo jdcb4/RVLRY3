@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 export function SummaryChips({ items }) {
   return (
@@ -22,12 +22,17 @@ export function TeamScoreboard({
   defaultOpen = false,
   summary = null
 }) {
+  const [isOpen, setIsOpen] = useState(() => defaultOpen);
   const activeTeam = teams.find((team) => team.id === activeTeamId);
   const summaryLabel =
     summary ?? (activeTeam ? `${activeTeam.name} up` : `${teams.length} teams`);
 
   return (
-    <details className="panel disclosure" open={defaultOpen}>
+    <details
+      className="panel disclosure"
+      open={isOpen}
+      onToggle={(event) => setIsOpen(event.currentTarget.open)}
+    >
       <summary className="disclosure__summary">
         <div className="disclosure__summary-copy">
           <h2>{title}</h2>

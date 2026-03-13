@@ -90,7 +90,8 @@ const connectHarness = async (baseUrl) => {
   const state = {
     room: null,
     privateState: null,
-    lobbyPrivateState: null
+    lobbyPrivateState: null,
+    kickedNotice: null
   };
   const socket = ioClient(baseUrl, {
     autoConnect: false,
@@ -107,6 +108,9 @@ const connectHarness = async (baseUrl) => {
   });
   socket.on('room:private', (payload) => {
     state.lobbyPrivateState = payload;
+  });
+  socket.on('room:kicked', (payload) => {
+    state.kickedNotice = payload;
   });
 
   socket.connect();
@@ -181,6 +185,27 @@ describe.sequential('RVLRY server integration', () => {
     expect(response.body.type).toBe('guessing');
     expect(response.body.category).toBeTruthy();
     expect(response.body.words).toHaveLength(3);
+  });
+
+  it('looks up a room by code for the home join flow', async () => {
+    harnesses = [await connectHarness(baseUrl)];
+    const [host] = harnesses;
+
+    const createdRoom = await host.emit('room:create', {
+      gameId: 'hatgame',
+      playerName: 'Hana',
+      playerToken: 'lookup-host'
+    });
+    host.playerId = createdRoom.playerId;
+
+    const response = await request(app).get(`/api/rooms/${createdRoom.code}`);
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({
+      code: createdRoom.code,
+      gameId: 'hatgame',
+      phase: 'lobby'
+    });
   });
 
   it('completes an Imposter room over websockets', async () => {
@@ -433,6 +458,77 @@ describe.sequential('RVLRY server integration', () => {
     );
   });
 
+  it('lets team captains rename teams and hosts remove players from the lobby', async () => {
+    harnesses = await Promise.all(Array.from({ length: 4 }, () => connectHarness(baseUrl)));
+    const [host, captainBravo, guestTwo, guestThree] = harnesses;
+
+    const createdRoom = await host.emit('room:create', {
+      gameId: 'hatgame',
+      playerName: 'Hana',
+      playerToken: 'captain-host'
+    });
+    host.playerId = createdRoom.playerId;
+    const roomCode = createdRoom.code;
+
+    const joinData = [
+      [captainBravo, 'Ivy', 'captain-bravo'],
+      [guestTwo, 'Jules', 'captain-jules'],
+      [guestThree, 'Kye', 'captain-kye']
+    ];
+
+    for (const [harness, name, token] of joinData) {
+      const joinedRoom = await harness.emit('room:join', {
+        code: roomCode,
+        playerName: name,
+        playerToken: token
+      });
+      harness.playerId = joinedRoom.playerId;
+    }
+
+    await waitFor(() => host.state.room?.players?.length === 4, 'all captain test players to join');
+
+    const bravoTeam = host.state.room.teams.find((team) => team.captainId === captainBravo.playerId);
+    expect(bravoTeam).toBeTruthy();
+
+    const deniedRename = await host.emit('room:update-team-name', {
+      code: roomCode,
+      teamId: bravoTeam.id,
+      name: 'Host Rename'
+    });
+    expect(deniedRename.error).toBe('Only the team captain can rename this team');
+
+    const captainRename = await captainBravo.emit('room:update-team-name', {
+      code: roomCode,
+      teamId: bravoTeam.id,
+      name: 'Bravo Legends'
+    });
+    expect(captainRename.ok).toBe(true);
+
+    await waitFor(
+      () => host.state.room?.teams?.some((team) => team.id === bravoTeam.id && team.name === 'Bravo Legends'),
+      'team captain rename to propagate'
+    );
+
+    const kicked = await host.emit('room:kick-player', {
+      code: roomCode,
+      playerId: guestThree.playerId
+    });
+    expect(kicked.ok).toBe(true);
+
+    await waitFor(
+      () => guestThree.state.kickedNotice?.code === roomCode,
+      'kicked notice for removed guest'
+    );
+    expect(guestThree.state.kickedNotice.message).toBe(`You were removed from room ${roomCode}.`);
+
+    const deniedRejoin = await guestThree.emit('room:join', {
+      code: roomCode,
+      playerName: 'Kye',
+      playerToken: 'captain-kye'
+    });
+    expect(deniedRejoin.error).toBe('You were removed from this room');
+  });
+
   it('completes a DrawNGuess chain over websockets', async () => {
     harnesses = await Promise.all(Array.from({ length: 4 }, () => connectHarness(baseUrl)));
     const [host, ...guests] = harnesses;
@@ -599,6 +695,27 @@ describe.sequential('RVLRY server integration', () => {
 
       await waitFor(() => host.state.room.gamePublicState.stage === 'turn', `hatgame phase ${phaseNumber} turn`);
 
+      if (phaseNumber === 1) {
+        const skipped = await describerHarness.emit('game:action', {
+          code: roomCode,
+          type: 'skip-clue',
+          payload: {}
+        });
+        expect(skipped.ok).toBe(true);
+
+        await waitFor(
+          () => describerHarness.state.privateState?.canReturnSkippedClue === true,
+          'hatgame skipped clue return state'
+        );
+
+        const returnedSkipped = await describerHarness.emit('game:action', {
+          code: roomCode,
+          type: 'return-skipped-clue',
+          payload: {}
+        });
+        expect(returnedSkipped.ok).toBe(true);
+      }
+
       while (host.state.room.gamePublicState.stage === 'turn') {
         const response = await describerHarness.emit('game:action', {
           code: roomCode,
@@ -613,6 +730,11 @@ describe.sequential('RVLRY server integration', () => {
 
     expect(host.state.room.gamePublicState.results.totalClues).toBe(12);
     expect(host.state.room.gamePublicState.results.leaderboard).toHaveLength(2);
+    expect(host.state.room.gamePublicState.results.bestTurn).toMatchObject({
+      phaseNumber: 1,
+      phaseName: 'Describe',
+      score: 12
+    });
 
     const returned = await host.emit('room:return-to-lobby', { code: roomCode });
     expect(returned.ok).toBe(true);

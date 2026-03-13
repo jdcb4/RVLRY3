@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
-import { fetchHatGameSuggestions } from '../../games/contentApi';
 import { InfoIcon, ShuffleIcon, UsersIcon } from '../../components/Icons';
+import { fetchHatGameSuggestions } from '../../games/contentApi';
 import { HATGAME_MAX_CLUE_LENGTH, buildTeamRosters } from './helpers';
-import { LobbyDisclosure, TeamCard } from './common';
+import { LobbyDisclosure, LobbySettingList, TeamCard } from './common';
 
 export function HatGameLobby({
   roomCode,
@@ -17,6 +17,7 @@ export function HatGameLobby({
   updateTeamName,
   assignTeam,
   rebalanceTeams,
+  kickPlayer,
   lobbyPrivateState,
   submitHatClues,
   setError,
@@ -30,7 +31,6 @@ export function HatGameLobby({
     roomState.settings?.cluesPerPlayer ??
     settingsForm.cluesPerPlayer ??
     6;
-  const clueCountsByPlayerId = roomState.lobbyState?.clueCountsByPlayerId ?? {};
   const [clueDrafts, setClueDrafts] = useState(() =>
     Array.from({ length: requiredClues }, () => '')
   );
@@ -55,6 +55,13 @@ export function HatGameLobby({
   }, [lobbyPrivateState?.clues, requiredClues]);
 
   const savedCount = lobbyPrivateState?.submittedCount ?? 0;
+  const optionsSummary = `${settingsForm.teamCount} teams / ${settingsForm.turnDurationSeconds}s`;
+  const optionsList = [
+    { label: 'Teams', value: `${settingsForm.teamCount}` },
+    { label: 'Turn length', value: `${settingsForm.turnDurationSeconds}s` },
+    { label: 'Clues each', value: `${settingsForm.cluesPerPlayer}` },
+    { label: 'Skips per turn', value: `${settingsForm.skipsPerTurn}` }
+  ];
 
   const handleGenerateSuggestions = async () => {
     setError('');
@@ -68,7 +75,7 @@ export function HatGameLobby({
           (_, index) => suggestions[index] ?? currentDrafts[index] ?? ''
         )
       );
-      onToast('Who-list suggestions loaded');
+      onToast('Suggestions loaded');
       onPlaySubmitCue();
     } catch (generateError) {
       setError(
@@ -110,50 +117,110 @@ export function HatGameLobby({
 
   return (
     <section className="panel panel--stacked">
-      <div className="panel-heading">
-        <h2>Teams</h2>
-        <p>Join a team first, then finish your clue pack.</p>
-      </div>
+      {error ? <p className="connection-banner connection-banner--error">{error}</p> : null}
 
-      {error && <p className="connection-banner connection-banner--error">{error}</p>}
-
-      <div className="team-grid">
-        {teamRosters.map((team) => (
-          <TeamCard
-            key={team.id}
-            team={team}
-            currentPlayer={currentPlayer}
-            isHost={isHost}
-            roomCode={roomCode}
-            pendingAction={pendingAction}
-            teamNameDraft={teamNameDrafts[team.id] ?? team.name}
-            setTeamNameDraft={setTeamNameDraft}
-            onSaveTeamName={updateTeamName}
-            onAssignTeam={assignTeam}
-          />
-        ))}
-      </div>
+      <LobbyDisclosure title="Teams" summary={`${teamRosters.length} teams`} icon={<UsersIcon />}>
+        <div className="team-grid">
+          {teamRosters.map((team) => (
+            <TeamCard
+              key={team.id}
+              team={team}
+              currentPlayer={currentPlayer}
+              hostId={roomState.hostId}
+              isHost={isHost}
+              roomCode={roomCode}
+              pendingAction={pendingAction}
+              teamNameDraft={teamNameDrafts[team.id] ?? team.name}
+              setTeamNameDraft={setTeamNameDraft}
+              onSaveTeamName={updateTeamName}
+              onAssignTeam={assignTeam}
+              onKickPlayer={kickPlayer}
+              onToast={onToast}
+            />
+          ))}
+        </div>
+      </LobbyDisclosure>
 
       <LobbyDisclosure
-        title="Team options"
-        summary={`${settingsForm.teamCount} teams`}
-        icon={<UsersIcon />}
+        title="Options"
+        summary={optionsSummary}
+        icon={<InfoIcon />}
+        open={isHost}
       >
-        <div className="field-stack">
-          <label className="settings-field">
-            <span className="helper-text">Teams</span>
-            <select
-              value={settingsForm.teamCount}
-              disabled={!isHost || pendingAction === 'update-settings'}
-              onChange={(event) => updateSetting('teamCount', Number.parseInt(event.target.value, 10))}
-            >
-              <option value={2}>2 teams</option>
-              <option value={3}>3 teams</option>
-              <option value={4}>4 teams</option>
-            </select>
-          </label>
+        {isHost ? (
+          <div className="field-stack">
+            <div className="settings-grid">
+              <label className="settings-field">
+                <span className="helper-text">Teams</span>
+                <select
+                  value={settingsForm.teamCount}
+                  disabled={pendingAction === 'update-settings'}
+                  onChange={(event) =>
+                    updateSetting('teamCount', Number.parseInt(event.target.value, 10))
+                  }
+                >
+                  <option value={2}>2 teams</option>
+                  <option value={3}>3 teams</option>
+                  <option value={4}>4 teams</option>
+                </select>
+              </label>
 
-          {isHost ? (
+              <label className="settings-field">
+                <span className="helper-text">Turn length</span>
+                <select
+                  value={settingsForm.turnDurationSeconds}
+                  disabled={pendingAction === 'update-settings'}
+                  onChange={(event) =>
+                    updateSetting('turnDurationSeconds', Number.parseInt(event.target.value, 10))
+                  }
+                >
+                  <option value={30}>30 seconds</option>
+                  <option value={45}>45 seconds</option>
+                  <option value={60}>60 seconds</option>
+                  <option value={90}>90 seconds</option>
+                  <option value={120}>120 seconds</option>
+                </select>
+              </label>
+
+              <label className="settings-field">
+                <span className="helper-text">Clues each</span>
+                <select
+                  value={settingsForm.cluesPerPlayer}
+                  disabled={pendingAction === 'update-settings'}
+                  onChange={(event) =>
+                    updateSetting('cluesPerPlayer', Number.parseInt(event.target.value, 10))
+                  }
+                >
+                  <option value={3}>3 clues</option>
+                  <option value={4}>4 clues</option>
+                  <option value={5}>5 clues</option>
+                  <option value={6}>6 clues</option>
+                  <option value={7}>7 clues</option>
+                  <option value={8}>8 clues</option>
+                  <option value={9}>9 clues</option>
+                  <option value={10}>10 clues</option>
+                </select>
+              </label>
+
+              <label className="settings-field">
+                <span className="helper-text">Skips per turn</span>
+                <select
+                  value={settingsForm.skipsPerTurn}
+                  disabled={pendingAction === 'update-settings'}
+                  onChange={(event) =>
+                    updateSetting('skipsPerTurn', Number.parseInt(event.target.value, 10))
+                  }
+                >
+                  <option value={0}>0 skips</option>
+                  <option value={1}>1 skip</option>
+                  <option value={2}>2 skips</option>
+                  <option value={3}>3 skips</option>
+                  <option value={4}>4 skips</option>
+                  <option value={5}>5 skips</option>
+                </select>
+              </label>
+            </div>
+
             <button
               className="secondary-action"
               disabled={pendingAction === 'rebalance-teams'}
@@ -162,71 +229,10 @@ export function HatGameLobby({
               <ShuffleIcon />
               Rebalance teams
             </button>
-          ) : null}
-        </div>
-      </LobbyDisclosure>
-
-      <LobbyDisclosure
-        title="Round options"
-        summary={`${settingsForm.turnDurationSeconds}s turns, ${settingsForm.cluesPerPlayer} clues each`}
-        icon={<InfoIcon />}
-      >
-        <div className="settings-grid">
-          <label className="settings-field">
-            <span className="helper-text">Turn length</span>
-            <select
-              value={settingsForm.turnDurationSeconds}
-              disabled={!isHost || pendingAction === 'update-settings'}
-              onChange={(event) =>
-                updateSetting('turnDurationSeconds', Number.parseInt(event.target.value, 10))
-              }
-            >
-              <option value={30}>30 seconds</option>
-              <option value={45}>45 seconds</option>
-              <option value={60}>60 seconds</option>
-              <option value={90}>90 seconds</option>
-              <option value={120}>120 seconds</option>
-            </select>
-          </label>
-
-          <label className="settings-field">
-            <span className="helper-text">Clues each</span>
-            <select
-              value={settingsForm.cluesPerPlayer}
-              disabled={!isHost || pendingAction === 'update-settings'}
-              onChange={(event) =>
-                updateSetting('cluesPerPlayer', Number.parseInt(event.target.value, 10))
-              }
-            >
-              <option value={3}>3 clues</option>
-              <option value={4}>4 clues</option>
-              <option value={5}>5 clues</option>
-              <option value={6}>6 clues</option>
-              <option value={7}>7 clues</option>
-              <option value={8}>8 clues</option>
-              <option value={9}>9 clues</option>
-              <option value={10}>10 clues</option>
-            </select>
-          </label>
-
-          <label className="settings-field">
-            <span className="helper-text">Skips per turn</span>
-            <select
-              value={settingsForm.skipsPerTurn}
-              disabled={!isHost || pendingAction === 'update-settings'}
-              onChange={(event) =>
-                updateSetting('skipsPerTurn', Number.parseInt(event.target.value, 10))
-              }
-            >
-              <option value={0}>0 skips</option>
-              <option value={1}>1 skip</option>
-              <option value={2}>2 skips</option>
-              <option value={3}>3 skips</option>
-              <option value={4}>4 skips</option>
-              <option value={5}>5 skips</option>
-            </select>
-          </label>
-        </div>
+          </div>
+        ) : (
+          <LobbySettingList items={optionsList} />
+        )}
       </LobbyDisclosure>
 
       <LobbyDisclosure
@@ -255,40 +261,16 @@ export function HatGameLobby({
             disabled={loadingSuggestions}
             onClick={handleGenerateSuggestions}
           >
-            {loadingSuggestions ? 'Loading suggestions' : 'Who list'}
+            {loadingSuggestions ? 'Loading suggestions' : 'Give me suggestions'}
           </button>
           <button disabled={pendingAction === 'submit-hat-clues'} onClick={handleSubmit}>
             Save clues
           </button>
         </div>
-      </LobbyDisclosure>
 
-      <LobbyDisclosure
-        title="Submission status"
-        summary={`${Object.values(clueCountsByPlayerId).filter((count) => count === requiredClues).length} ready`}
-        icon={<InfoIcon />}
-      >
-        <ul className="player-list">
-          {roomState.players.map((player) => {
-            const clueCount = clueCountsByPlayerId[player.id] ?? 0;
-            const isSubmitted = clueCount === requiredClues;
-
-            return (
-              <li key={player.id} className="player-row player-row--compact">
-                <div className="player-row__identity">
-                  <span className="player-row__name">{player.name}</span>
-                  <div className="player-row__meta">
-                    {player.id === currentPlayer?.id && <span className="badge badge--self">You</span>}
-                    {player.id === roomState.hostId && <span className="badge badge--host">Host</span>}
-                  </div>
-                </div>
-                <span className={isSubmitted ? 'badge badge--ready' : 'badge'}>
-                  {clueCount} / {requiredClues}
-                </span>
-              </li>
-            );
-          })}
-        </ul>
+        {savedCount < requiredClues ? (
+          <p className="helper-text">Save every clue before you ready up.</p>
+        ) : null}
       </LobbyDisclosure>
     </section>
   );

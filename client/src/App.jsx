@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useState } from 'react';
-import { Link, Route, Routes } from 'react-router-dom';
+import { Link, Route, Routes, useNavigate } from 'react-router-dom';
 import { PhoneIcon, UsersIcon } from './components/Icons';
 import { games } from './games/config';
 
@@ -22,9 +22,9 @@ const PlayShell = lazy(() =>
   import('./play/PlayShell').then((module) => ({ default: module.PlayShell }))
 );
 
-function HubModeToggle({ mode, onChange }) {
+function HostModeToggle({ mode, onChange }) {
   return (
-    <div className="hub-mode-toggle" role="group" aria-label="Play mode">
+    <div className="hub-mode-toggle" role="group" aria-label="Host mode">
       <button
         type="button"
         aria-pressed={mode === 'online'}
@@ -48,51 +48,125 @@ function HubModeToggle({ mode, onChange }) {
 }
 
 function Home() {
+  const navigate = useNavigate();
   const [playerName, setPlayerName] = useState(() => window.localStorage.getItem(PLAYER_NAME_STORAGE_KEY) ?? '');
-  const [mode, setMode] = useState(() => window.localStorage.getItem(HUB_MODE_STORAGE_KEY) ?? 'online');
+  const [hostMode, setHostMode] = useState(() => window.localStorage.getItem(HUB_MODE_STORAGE_KEY) ?? 'online');
+  const [joinCode, setJoinCode] = useState('');
+  const [joinError, setJoinError] = useState('');
+  const [joinPending, setJoinPending] = useState(false);
 
   useEffect(() => {
     window.localStorage.setItem(PLAYER_NAME_STORAGE_KEY, playerName);
   }, [playerName]);
 
   useEffect(() => {
-    window.localStorage.setItem(HUB_MODE_STORAGE_KEY, mode);
-  }, [mode]);
+    window.localStorage.setItem(HUB_MODE_STORAGE_KEY, hostMode);
+  }, [hostMode]);
+
+  const handleJoin = async () => {
+    const normalizedCode = joinCode.trim().toUpperCase();
+    if (!playerName.trim()) {
+      setJoinError('Enter your name first');
+      return;
+    }
+
+    if (!normalizedCode) {
+      setJoinError('Enter a room code');
+      return;
+    }
+
+    setJoinPending(true);
+    setJoinError('');
+
+    try {
+      const response = await fetch(`/api/rooms/${normalizedCode}`);
+      const payload = await response.json().catch(() => ({}));
+
+      if (!response.ok || !payload?.gameId) {
+        setJoinError(payload?.error ?? 'Room not found');
+        return;
+      }
+
+      navigate(`/play/${payload.gameId}/join/${payload.code}`, {
+        state: { autoJoin: true }
+      });
+    } catch {
+      setJoinError('Unable to look up that room right now');
+    } finally {
+      setJoinPending(false);
+    }
+  };
 
   return (
     <main className="hub-shell hub-shell--centered">
       <header className="hub-hero hub-hero--centered">
         <h1 className="scene__title">RVLRY</h1>
-        <p className="scene__lead">Pick a mode, choose a game, and only show the table what matters next.</p>
+        <p className="scene__lead">Name yourself once, join by code, or host the game you want.</p>
       </header>
 
       <section className="hub-panel">
+        <div className="panel-heading">
+          <h2>Name</h2>
+        </div>
+
+        <label className="settings-field">
+          <span className="helper-text">Your name</span>
+          <input
+            placeholder="Player name"
+            value={playerName}
+            onChange={(event) => {
+              setPlayerName(event.target.value);
+              setJoinError('');
+            }}
+          />
+        </label>
+      </section>
+
+      <section className="hub-panel">
+        <div className="panel-heading">
+          <h2>Join a game</h2>
+          <p>Already have a code? Jump straight in.</p>
+        </div>
+
         <div className="field-stack">
           <label className="settings-field">
-            <span className="helper-text">Your name</span>
+            <span className="helper-text">Game code</span>
             <input
-              placeholder="Player name"
-              value={playerName}
-              onChange={(event) => setPlayerName(event.target.value)}
+              placeholder="Six-character code"
+              value={joinCode}
+              maxLength={6}
+              onChange={(event) => {
+                setJoinCode(event.target.value.toUpperCase());
+                setJoinError('');
+              }}
             />
           </label>
-          <HubModeToggle mode={mode} onChange={setMode} />
+
+          {joinError ? <p className="connection-banner connection-banner--error">{joinError}</p> : null}
+
+          <div className="actions">
+            <button disabled={joinPending} onClick={handleJoin}>
+              {joinPending ? 'Joining' : 'Join game'}
+            </button>
+          </div>
         </div>
       </section>
 
       <section className="hub-panel hub-panel--games">
         <div className="panel-heading">
-          <h2>{mode === 'online' ? 'Choose a game' : 'Choose a local game'}</h2>
+          <h2>Host a game</h2>
         </div>
+
+        <HostModeToggle mode={hostMode} onChange={setHostMode} />
 
         <div className="hub-list">
           {games
-            .filter((game) => mode === 'online' || game.supportsLocal)
+            .filter((game) => hostMode === 'online' || game.supportsLocal)
             .map((game) => (
               <Link
                 key={game.id}
                 className="hub-card hub-card--link"
-                to={mode === 'online' ? `/play/${game.id}` : `/local/${game.id}`}
+                to={hostMode === 'online' ? `/play/${game.id}` : `/local/${game.id}`}
               >
                 <div className="hub-card__body">
                   <div>
@@ -100,15 +174,13 @@ function Home() {
                     <h2>{game.name}</h2>
                     <div className="facts-row facts-row--tight">
                       <span className="fact-chip">{game.minPlayers}+ players</span>
-                      {mode === 'online' ? (
-                        <span className="fact-chip">Room code</span>
-                      ) : (
-                        <span className="fact-chip">Single device</span>
-                      )}
+                      <span className="fact-chip">
+                        {hostMode === 'online' ? 'Online room' : 'Single device'}
+                      </span>
                     </div>
                   </div>
                   <span className="hub-card__icon" aria-hidden="true">
-                    {mode === 'online' ? <UsersIcon /> : <PhoneIcon />}
+                    {hostMode === 'online' ? <UsersIcon /> : <PhoneIcon />}
                   </span>
                 </div>
               </Link>

@@ -20,6 +20,19 @@ const getRoomModule = (roomOrGameId) =>
     typeof roomOrGameId === 'string' ? roomOrGameId : roomOrGameId?.gameId
   );
 
+export const lookupRoomSummary = (rooms, code) => {
+  const room = rooms.get(normalizeCode(code));
+  if (!room) {
+    return null;
+  }
+
+  return {
+    code: room.code,
+    gameId: room.gameId,
+    phase: room.phase
+  };
+};
+
 const createPlayer = ({
   playerToken,
   playerName,
@@ -41,6 +54,9 @@ const createPlayer = ({
 const sortPlayers = (room) => {
   room.players.sort((left, right) => left.seat - right.seat);
 };
+
+const getTeamCaptain = (room, teamId) =>
+  room.players.find((player) => player.teamId === teamId) ?? null;
 
 const clearRoomExpiry = (room) => {
   if (room.expiryTimer) {
@@ -78,7 +94,12 @@ const sanitizeRoom = (room) => {
       ready: player.ready,
       teamId: player.teamId ?? null
     })),
-    teams: room.teams ? room.teams.map((team) => ({ ...team })) : undefined,
+    teams: room.teams
+      ? room.teams.map((team) => ({
+          ...team,
+          captainId: getTeamCaptain(room, team.id)?.id ?? null
+        }))
+      : undefined,
     settings: room.settings ? { ...room.settings } : undefined,
     lobbyState: roomModule.sanitizeLobbyState(room),
     gamePublicState: room.gamePublicState
@@ -346,6 +367,7 @@ const createRoomState = ({ code, gameId, hostPlayer }) => {
     players: [hostPlayer],
     nextSeat: 1,
     rejoinSlots: new Map(),
+    blockedPlayerTokens: new Set(),
     gamePublicState: null,
     gamePrivateState: new Map(),
     gameInternalState: null,
@@ -376,8 +398,7 @@ const resetRoomToLobby = (room) => {
   }
 };
 
-export function registerRoomHandlers(io, wordStore) {
-  const rooms = new Map();
+export function registerRoomHandlers(io, wordStore, { rooms = new Map() } = {}) {
 
   io.on('connection', (socket) => {
     socket.on('room:create', ({ gameId, playerName, playerToken }, callback) => {
@@ -412,6 +433,11 @@ export function registerRoomHandlers(io, wordStore) {
 
       if (!playerToken) {
         callback?.({ error: 'Missing player token' });
+        return;
+      }
+
+      if (room.blockedPlayerTokens.has(playerToken)) {
+        callback?.({ error: 'You were removed from this room' });
         return;
       }
 
@@ -520,14 +546,15 @@ export function registerRoomHandlers(io, wordStore) {
         return;
       }
 
-      if (room.hostId !== player.id) {
-        callback?.({ error: 'Only the host can rename teams' });
-        return;
-      }
-
       const team = room.teams.find((entry) => entry.id === teamId);
       if (!team) {
         callback?.({ error: 'Select a valid team' });
+        return;
+      }
+
+      const captain = getTeamCaptain(room, teamId);
+      if (captain?.id !== player.id) {
+        callback?.({ error: 'Only the team captain can rename this team' });
         return;
       }
 
@@ -535,6 +562,67 @@ export function registerRoomHandlers(io, wordStore) {
       team.name = nextName;
       emitRoomUpdate(io, room);
       callback?.({ ok: true });
+    });
+
+    socket.on('room:kick-player', ({ code, playerId }, callback) => {
+      const room = rooms.get(normalizeCode(code));
+      if (!room) {
+        callback?.({ error: 'Room not found' });
+        return;
+      }
+
+      if (room.phase !== 'lobby') {
+        callback?.({ error: 'Players can only be removed from the lobby' });
+        return;
+      }
+
+      const player = getPlayerBySocketId(room, socket.id);
+      if (!player) {
+        callback?.({ error: 'Player not found in room' });
+        return;
+      }
+
+      if (room.hostId !== player.id) {
+        callback?.({ error: 'Only the host can remove players' });
+        return;
+      }
+
+      if (player.id === playerId) {
+        callback?.({ error: 'The host cannot remove themselves' });
+        return;
+      }
+
+      const targetIndex = room.players.findIndex((roomPlayer) => roomPlayer.id === playerId);
+      if (targetIndex === -1) {
+        callback?.({ error: 'Player not found in room' });
+        return;
+      }
+
+      const [target] = room.players.splice(targetIndex, 1);
+      room.rejoinSlots.delete(target.playerToken);
+      room.blockedPlayerTokens.add(target.playerToken);
+
+      if (room.lobbyState?.clueSubmissions?.[target.id]) {
+        const nextClueSubmissions = { ...(room.lobbyState.clueSubmissions ?? {}) };
+        delete nextClueSubmissions[target.id];
+        room.lobbyState = {
+          ...(room.lobbyState ?? {}),
+          clueSubmissions: nextClueSubmissions
+        };
+      }
+
+      io.to(target.socketId).emit('room:kicked', {
+        gameId: room.gameId,
+        code: room.code,
+        message: `You were removed from room ${room.code}.`
+      });
+      io.sockets.sockets.get(target.socketId)?.leave(room.code);
+
+      syncHost(room);
+      emitRoomUpdate(io, room);
+      emitAllLobbyPrivateStates(io, room);
+      maybeDeleteRoom(rooms, room);
+      callback?.({ ok: true, removedPlayerId: target.id });
     });
 
     socket.on('room:rebalance-teams', ({ code }, callback) => {

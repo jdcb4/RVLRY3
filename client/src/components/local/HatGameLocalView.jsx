@@ -105,14 +105,15 @@ export function HatGameLocalView({
             </div>
           </div>
 
+          <div className="notice-card notice-card--focus">
+            <strong>Current rule</strong>
+            <p>{phaseMeta.instruction}</p>
+          </div>
+
           <div className="role-card">
             <span className="helper-text">Current clue</span>
             <strong className="role-card__title">{currentClue}</strong>
-            <span className="role-card__body">
-              {session.activeTurn?.skippedCluePoolIndex !== null
-                ? 'A skipped clue must be solved before another skip.'
-                : phaseMeta.instruction}
-            </span>
+            <span className="role-card__body">Keep the clue visible only for the describer.</span>
           </div>
 
           <SummaryChips
@@ -122,6 +123,24 @@ export function HatGameLocalView({
               { label: 'Correct', value: session.activeTurn?.correctCount ?? 0 }
             ]}
           />
+
+          {session.activeTurn?.skippedCluePoolIndex !== null && (
+            <div className="notice-card notice-card--focus">
+              <strong>Skipped clue waiting</strong>
+              <p>
+                {session.activeTurn?.skippedClueText ??
+                  'Bring the skipped clue back before using another skip.'}
+              </p>
+              <div className="actions">
+                <button
+                  className="secondary-action"
+                  onClick={() => applyAction({ type: 'return-skipped-clue' })}
+                >
+                  Go back to skipped clue
+                </button>
+              </div>
+            </div>
+          )}
 
           <div className="actions actions--stretch">
             <button onClick={() => applyAction({ type: 'mark-correct' })}>Correct</button>
@@ -164,6 +183,16 @@ export function HatGameLocalView({
               { label: 'Players', value: session.players.length }
             ]}
           />
+
+          {session.results?.bestTurn ? (
+            <div className="notice-card notice-card--focus">
+              <strong>Best turn</strong>
+              <p>
+                {session.results.bestTurn.describerName} scored {session.results.bestTurn.score}{' '}
+                for {session.results.bestTurn.teamName} in {session.results.bestTurn.phaseName}.
+              </p>
+            </div>
+          ) : null}
 
           <LeaderboardList
             leaderboard={session.results?.leaderboard ?? []}

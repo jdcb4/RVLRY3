@@ -19,8 +19,10 @@ export function GameLobbyScreen() {
     currentPlayer,
     roomState,
     lobbyPrivateState,
+    roomExitNotice,
     error,
     setError,
+    clearRoomExitNotice,
     pendingAction,
     ensureRoom,
     assignTeam,
@@ -28,6 +30,7 @@ export function GameLobbyScreen() {
     rebalanceTeams,
     updateRoomSettings,
     submitHatClues,
+    kickPlayer,
     setReady,
     startGame
   } = usePlaySession();
@@ -72,6 +75,18 @@ export function GameLobbyScreen() {
   }, [ensureRoom, game.id, navigate, playerId, playerName, roomCode, roomState?.code]);
 
   useEffect(() => {
+    if (roomExitNotice?.code !== roomCode) {
+      return;
+    }
+
+    navigate(`/play/${game.id}`, {
+      replace: true,
+      state: { toastMessage: roomExitNotice.message }
+    });
+    clearRoomExitNotice();
+  }, [clearRoomExitNotice, game.id, navigate, roomCode, roomExitNotice]);
+
+  useEffect(() => {
     if (roomState?.phase === 'in-progress' && roomState.code === roomCode) {
       navigate(`/play/${game.id}/game/${roomCode}`, { replace: true });
     }
@@ -100,11 +115,27 @@ export function GameLobbyScreen() {
 
   const isHost = roomState?.hostId === playerId;
   const allPlayersReady = roomState?.players.every((player) => player.ready) ?? false;
+  const requiredHatClues =
+    roomState?.lobbyState?.requiredCluesPerPlayer ??
+    roomState?.settings?.cluesPerPlayer ??
+    settingsForm.cluesPerPlayer;
+  const currentPlayerClueCount =
+    currentPlayer && gameModule.requiresHatClues
+      ? (roomState?.lobbyState?.clueCountsByPlayerId?.[currentPlayer.id] ??
+        lobbyPrivateState?.submittedCount ??
+        0)
+      : 0;
+  const canReadyUp =
+    !gameModule.requiresHatClues || currentPlayerClueCount === requiredHatClues;
   const inviteLink = buildInviteLink(game.id, roomCode);
   const startHint = useMemo(
     () => getStartHint({ roomState, game, gameModule, isHost, allPlayersReady }),
     [allPlayersReady, game, gameModule, isHost, roomState]
   );
+  const readyHint =
+    !canReadyUp && currentPlayer
+      ? `Save all ${requiredHatClues} clues before readying up.`
+      : startHint ?? (isHost ? 'Start when everyone is set.' : 'The host starts the game.');
   const LobbyComponent = LOBBY_COMPONENTS[gameModule.lobbyVariant] ?? StandardLobby;
 
   useEffect(() => {
@@ -251,6 +282,7 @@ export function GameLobbyScreen() {
           rebalanceTeams={rebalanceTeams}
           lobbyPrivateState={lobbyPrivateState}
           submitHatClues={handleSubmitHatClues}
+          kickPlayer={kickPlayer}
           setError={setError}
           error={error}
           playerId={playerId}
@@ -261,7 +293,14 @@ export function GameLobbyScreen() {
 
       <div className="action-bar action-bar--actions-only">
         <div className="action-bar__actions">
-          <button disabled={!currentPlayer || pendingAction === 'ready'} onClick={handleReadyToggle}>
+          <button
+            disabled={
+              !currentPlayer ||
+              pendingAction === 'ready' ||
+              (!currentPlayer?.ready && !canReadyUp)
+            }
+            onClick={handleReadyToggle}
+          >
             {currentPlayer?.ready ? 'Unready' : 'Ready'}
           </button>
           {isHost && (
@@ -270,9 +309,7 @@ export function GameLobbyScreen() {
             </button>
           )}
         </div>
-        <p className="helper-text">
-          {startHint ?? (isHost ? 'Start when everyone is set.' : 'The host starts the game.')}
-        </p>
+        <p className="helper-text">{readyHint}</p>
       </div>
     </main>
   );

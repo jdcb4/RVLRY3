@@ -1,4 +1,34 @@
-export function StandardLobby({ roomState, playerId, error }) {
+import { CheckIcon, XIcon } from '../../components/Icons';
+
+function ReadyStateIcon({ playerName, ready }) {
+  return (
+    <span
+      aria-label={ready ? `${playerName} ready` : `${playerName} not ready`}
+      className={ready ? 'ready-mark ready-mark--ready' : 'ready-mark ready-mark--waiting'}
+      role="img"
+    >
+      {ready ? <CheckIcon /> : <XIcon />}
+    </span>
+  );
+}
+
+export function StandardLobby({
+  roomCode,
+  roomState,
+  currentPlayer,
+  isHost,
+  pendingAction,
+  kickPlayer,
+  error,
+  onToast
+}) {
+  const handleKickPlayer = async (player) => {
+    const response = await kickPlayer?.(roomCode, player.id);
+    if (response?.ok) {
+      onToast?.(`${player.name} removed from the room`);
+    }
+  };
+
   return (
     <section className="panel panel--stacked">
       <div className="panel-heading">
@@ -13,13 +43,23 @@ export function StandardLobby({ roomState, playerId, error }) {
             <div className="player-row__identity">
               <span className="player-row__name">{player.name}</span>
               <div className="player-row__meta">
-                {player.id === playerId && <span className="badge badge--self">You</span>}
+                {player.id === currentPlayer?.id && <span className="badge badge--self">You</span>}
                 {player.id === roomState.hostId && <span className="badge badge--host">Host</span>}
               </div>
             </div>
-            <span className={player.ready ? 'badge badge--ready' : 'badge'}>
-              {player.ready ? 'Ready' : 'Waiting'}
-            </span>
+            <div className="team-card__player-actions">
+              <ReadyStateIcon playerName={player.name} ready={player.ready} />
+              {isHost && player.id !== currentPlayer?.id ? (
+                <button
+                  aria-label={`Remove ${player.name}`}
+                  className="icon-button icon-button--danger"
+                  disabled={pendingAction === 'kick-player'}
+                  onClick={() => handleKickPlayer(player)}
+                >
+                  <XIcon />
+                </button>
+              ) : null}
+            </div>
           </li>
         ))}
       </ul>

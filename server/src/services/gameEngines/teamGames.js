@@ -200,6 +200,10 @@ const buildHatGamePrivateState = (players, publicState, game) => {
         isDescriber &&
         (game.activeTurn?.skipsRemaining ?? 0) > 0 &&
         game.activeTurn?.skippedCluePoolIndex === null,
+      canReturnSkippedClue:
+        publicState.stage === 'turn' &&
+        isDescriber &&
+        game.activeTurn?.skippedCluePoolIndex !== null,
       canEndTurn: publicState.stage === 'turn' && isDescriber,
       clue: publicState.stage === 'turn' && isDescriber ? currentClue?.text ?? null : null,
       skipsRemaining:

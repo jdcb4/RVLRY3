@@ -109,14 +109,15 @@ export function HatGamePlay({
               </div>
             </div>
 
+            <div className="notice-card notice-card--focus">
+              <strong>Current rule</strong>
+              <p>{publicState.phaseInstruction}</p>
+            </div>
+
             <div className="role-card">
               <span className="helper-text">Current clue</span>
               <strong className="role-card__title">{privateState?.clue ?? 'Loading next clue'}</strong>
-              <span className="role-card__body">
-                {privateState?.skippedCluePending
-                  ? 'A skipped clue must come back before you can skip again.'
-                  : publicState.phaseInstruction}
-              </span>
+              <span className="role-card__body">Keep the clue on screen and score it fast.</span>
             </div>
 
             <SummaryChips
@@ -129,8 +130,19 @@ export function HatGamePlay({
 
             {privateState?.skippedCluePending && (
               <div className="notice-card notice-card--focus">
-                <strong>Skip is locked</strong>
-                <p>Finish the skipped clue before skipping again.</p>
+                <strong>Skipped clue waiting</strong>
+                <p>{privateState?.skippedClueText ?? 'Bring the skipped clue back before you skip again.'}</p>
+                <div className="actions">
+                  <button
+                    className="secondary-action"
+                    disabled={
+                      pendingAction === 'return-skipped-clue' || !privateState?.canReturnSkippedClue
+                    }
+                    onClick={() => sendGameAction(roomCode, 'return-skipped-clue')}
+                  >
+                    Go back to skipped clue
+                  </button>
+                </div>
               </div>
             )}
 
@@ -182,14 +194,14 @@ export function HatGamePlay({
             </div>
 
             <div className="notice-card notice-card--focus">
-              <strong>Keep calling names out loud</strong>
+              <strong>Current rule</strong>
               <p>{publicState.phaseInstruction}</p>
             </div>
 
             {turn?.skippedCluePending && (
               <div className="notice-card">
-                <strong>A skipped clue is still waiting</strong>
-                <p>The describer cannot skip again yet.</p>
+                <strong>Skipped clue waiting</strong>
+                <p>The describer needs to circle back before another skip.</p>
               </div>
             )}
           </section>
@@ -249,6 +261,16 @@ export function HatGamePlay({
               { label: 'Clues', value: results?.totalClues ?? 0 }
             ]}
           />
+
+          {results?.bestTurn ? (
+            <div className="notice-card notice-card--focus">
+              <strong>Best turn</strong>
+              <p>
+                {results.bestTurn.describerName} scored {results.bestTurn.score} for{' '}
+                {results.bestTurn.teamName} in {results.bestTurn.phaseName}.
+              </p>
+            </div>
+          ) : null}
 
           <LeaderboardList
             leaderboard={results?.leaderboard ?? []}

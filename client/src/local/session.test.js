@@ -170,6 +170,18 @@ describe('local pass-and-play session engine', () => {
         payload: {}
       });
 
+      if (phaseNumber === 1) {
+        const skippedClue = session.activeTurn.clueQueue[0].text;
+        session = applyLocalAction(session, { type: 'skip-clue' });
+        expect(session.activeTurn.skippedClueText).toBe(skippedClue);
+        expect(session.activeTurn.clueQueue[session.activeTurn.queueIndex].text).not.toBe(
+          skippedClue
+        );
+
+        session = applyLocalAction(session, { type: 'return-skipped-clue' });
+        expect(session.activeTurn.clueQueue[session.activeTurn.queueIndex].text).toBe(skippedClue);
+      }
+
       while (session.stage === 'turn') {
         session = applyLocalAction(session, { type: 'mark-correct' });
       }
@@ -178,5 +190,10 @@ describe('local pass-and-play session engine', () => {
     expect(session.stage).toBe('results');
     expect(session.results.totalClues).toBe(12);
     expect(session.results.leaderboard).toHaveLength(2);
+    expect(session.results.bestTurn).toMatchObject({
+      phaseNumber: 1,
+      phaseName: 'Describe',
+      score: 12
+    });
   });
 });

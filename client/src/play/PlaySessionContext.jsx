@@ -49,6 +49,15 @@ const readPlayerToken = (gameId) => {
 };
 
 const readLastRoom = (gameId) => readJson(LAST_ROOMS_STORAGE_KEY, {})[gameId] ?? '';
+const clearStoredLastRoom = (gameId, codeToClear) => {
+  const storedRooms = readJson(LAST_ROOMS_STORAGE_KEY, {});
+  if (storedRooms[gameId] !== codeToClear) {
+    return;
+  }
+
+  delete storedRooms[gameId];
+  writeJson(LAST_ROOMS_STORAGE_KEY, storedRooms);
+};
 
 function useStoredPlayerName() {
   return useState(() => window.localStorage.getItem(NAME_STORAGE_KEY) ?? '');
@@ -63,6 +72,7 @@ export function PlaySessionProvider({ children, game }) {
   const [lobbyPrivateState, setLobbyPrivateState] = useState(null);
   const [lastRoomCode, setLastRoomCode] = useState(() => readLastRoom(game.id));
   const [error, setError] = useState('');
+  const [roomExitNotice, setRoomExitNotice] = useState(null);
   const [pendingAction, setPendingAction] = useState('');
   const [connectionState, setConnectionState] = useState('connecting');
 
@@ -77,6 +87,7 @@ export function PlaySessionProvider({ children, game }) {
     setLobbyPrivateState(null);
     setLastRoomCode(readLastRoom(game.id));
     setError('');
+    setRoomExitNotice(null);
   }, [game.id]);
 
   useEffect(() => {
@@ -103,6 +114,7 @@ export function PlaySessionProvider({ children, game }) {
         return;
       }
 
+      setRoomExitNotice(null);
       setRoomState(payload);
       setLastRoomCode(payload.code);
       writeJson(LAST_ROOMS_STORAGE_KEY, {
@@ -135,12 +147,31 @@ export function PlaySessionProvider({ children, game }) {
       setLobbyPrivateState(payload);
     };
 
+    const handleRoomKicked = (payload) => {
+      if (payload.gameId !== game.id) {
+        return;
+      }
+
+      clearStoredLastRoom(game.id, payload.code);
+      setPlayerId(null);
+      setRoomState(null);
+      setPrivateState(null);
+      setLobbyPrivateState(null);
+      setLastRoomCode('');
+      setError(payload.message ?? 'You were removed from the room.');
+      setRoomExitNotice({
+        code: payload.code,
+        message: payload.message ?? 'You were removed from the room.'
+      });
+    };
+
     socket.on('connect', handleConnect);
     socket.on('disconnect', handleDisconnect);
     socket.on('connect_error', handleConnectError);
     socket.on('room:update', handleRoomUpdate);
     socket.on('game:private', handlePrivateState);
     socket.on('room:private', handleLobbyPrivateState);
+    socket.on('room:kicked', handleRoomKicked);
 
     return () => {
       socket.off('connect', handleConnect);
@@ -149,6 +180,7 @@ export function PlaySessionProvider({ children, game }) {
       socket.off('room:update', handleRoomUpdate);
       socket.off('game:private', handlePrivateState);
       socket.off('room:private', handleLobbyPrivateState);
+      socket.off('room:kicked', handleRoomKicked);
       socket.disconnect();
       socketRef.current = null;
     };
@@ -161,13 +193,7 @@ export function PlaySessionProvider({ children, game }) {
 
   const clearLastRoom = useCallback(
     (codeToClear) => {
-      const storedRooms = readJson(LAST_ROOMS_STORAGE_KEY, {});
-      if (storedRooms[game.id] !== codeToClear) {
-        return;
-      }
-
-      delete storedRooms[game.id];
-      writeJson(LAST_ROOMS_STORAGE_KEY, storedRooms);
+      clearStoredLastRoom(game.id, codeToClear);
       setLastRoomCode('');
     },
     [game.id]
@@ -432,6 +458,21 @@ export function PlaySessionProvider({ children, game }) {
     [runRoomAction]
   );
 
+  const kickPlayer = useCallback(
+    async (code, targetPlayerId) => {
+      const normalizedCode = normalizeCode(code);
+      return runRoomAction('kick-player', 'room:kick-player', {
+        code: normalizedCode,
+        playerId: targetPlayerId
+      });
+    },
+    [runRoomAction]
+  );
+
+  const clearRoomExitNotice = useCallback(() => {
+    setRoomExitNotice(null);
+  }, []);
+
   const currentPlayer = useMemo(
     () => roomState?.players.find((player) => player.id === playerId) ?? null,
     [playerId, roomState?.players]
@@ -448,8 +489,10 @@ export function PlaySessionProvider({ children, game }) {
       privateState,
       lobbyPrivateState,
       lastRoomCode,
+      roomExitNotice,
       error,
       setError,
+      clearRoomExitNotice,
       pendingAction,
       connectionState,
       createRoom,
@@ -460,6 +503,7 @@ export function PlaySessionProvider({ children, game }) {
       rebalanceTeams,
       updateRoomSettings,
       submitHatClues,
+      kickPlayer,
       setReady,
       startGame,
       sendGameAction,
@@ -481,13 +525,16 @@ export function PlaySessionProvider({ children, game }) {
       playerName,
       privateState,
       rebalanceTeams,
+      roomExitNotice,
       returnRoomToLobby,
       roomState,
       sendGameAction,
+      clearRoomExitNotice,
       setPlayerName,
       setReady,
       startGame,
       submitHatClues,
+      kickPlayer,
       updateRoomSettings,
       updateTeamName
     ]

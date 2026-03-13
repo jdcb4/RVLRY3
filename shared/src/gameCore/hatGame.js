@@ -64,6 +64,7 @@ export const createHatGame = ({ teams, settings, cluePool }) => {
     usedCluePoolIndices: [],
     activeTurn: null,
     lastTurnSummary: null,
+    bestTurnSummary: null,
     results: null
   };
 };
@@ -90,7 +91,8 @@ const buildHatGameResults = (game) => {
     leaderboard,
     winnerTeamIds,
     isTie: winnerTeamIds.length > 1,
-    totalClues: game.cluePool.length
+    totalClues: game.cluePool.length,
+    bestTurn: game.bestTurnSummary
   };
 };
 
@@ -132,6 +134,19 @@ export const finishHatGameTurn = (game, players) => {
     nextPhaseName:
       phaseCompleted && game.phaseNumber < 3 ? getHatGamePhaseMeta(nextPhaseNumber).name : null
   };
+  const currentTurnHighlight = {
+    teamId: context.activeTeamId,
+    teamName: context.activeTeam?.name ?? 'Team',
+    describerId: context.activeDescriberId,
+    describerName: context.activeDescriberName,
+    score: game.activeTurn.score,
+    phaseNumber: game.phaseNumber,
+    phaseName: getHatGamePhaseMeta(game.phaseNumber).name
+  };
+  const bestTurnSummary =
+    !game.bestTurnSummary || currentTurnHighlight.score > game.bestTurnSummary.score
+      ? currentTurnHighlight
+      : game.bestTurnSummary;
   const currentDescriberIndex = game.describerIndexes[context.activeTeamId] ?? 0;
   const describerIndexes = {
     ...game.describerIndexes,
@@ -155,6 +170,7 @@ export const finishHatGameTurn = (game, players) => {
     stage: 'ready',
     activeTurn: null,
     lastTurnSummary,
+    bestTurnSummary,
     teamIndex,
     roundNumber,
     phaseNumber: nextPhaseNumber,
@@ -237,7 +253,7 @@ export const applyHatGameAction = (
     return finishHatGameTurn(game, players);
   }
 
-  if (!['mark-correct', 'skip-clue'].includes(action.type)) {
+  if (!['mark-correct', 'skip-clue', 'return-skipped-clue'].includes(action.type)) {
     return { error: 'Unknown action for HatGame' };
   }
 
@@ -305,6 +321,24 @@ export const applyHatGameAction = (
 
     const [skippedClue] = activeTurn.clueQueue.splice(activeTurn.queueIndex, 1);
     activeTurn.clueQueue.push(skippedClue);
+  }
+
+  if (action.type === 'return-skipped-clue') {
+    if (activeTurn.skippedCluePoolIndex === null) {
+      return { error: 'There is no skipped clue to return to' };
+    }
+
+    const skippedIndex = activeTurn.clueQueue.findIndex(
+      (clue) => clue.poolIndex === activeTurn.skippedCluePoolIndex
+    );
+    if (skippedIndex === -1) {
+      return { error: 'The skipped clue is no longer available' };
+    }
+
+    if (skippedIndex !== activeTurn.queueIndex) {
+      const [skippedClue] = activeTurn.clueQueue.splice(skippedIndex, 1);
+      activeTurn.clueQueue.splice(activeTurn.queueIndex, 0, skippedClue);
+    }
   }
 
   if (!activeTurn.clueQueue[activeTurn.queueIndex]) {

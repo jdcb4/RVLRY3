@@ -1,3 +1,5 @@
+import { useState } from 'react';
+
 export function ResultsActions({ isHost, roomCode, onReturnToLobby, pendingAction }) {
   if (!isHost) {
     return <p className="helper-text">The host can return the room to the lobby for another round.</p>;
@@ -13,8 +15,14 @@ export function ResultsActions({ isHost, roomCode, onReturnToLobby, pendingActio
 }
 
 export function DisclosurePanel({ title, description, summary, defaultOpen = false, children }) {
+  const [isOpen, setIsOpen] = useState(() => defaultOpen);
+
   return (
-    <details className="panel disclosure" open={defaultOpen}>
+    <details
+      className="panel disclosure"
+      open={isOpen}
+      onToggle={(event) => setIsOpen(event.currentTarget.open)}
+    >
       <summary className="disclosure__summary">
         <div>
           <h2>{title}</h2>

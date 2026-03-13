@@ -4,10 +4,20 @@ export const buildInviteLink = (gameId, roomCode) =>
   `${window.location.origin}/play/${gameId}/join/${roomCode}`;
 
 export const buildTeamRosters = (roomState) =>
-  (roomState?.teams ?? []).map((team) => ({
-    ...team,
-    players: roomState.players.filter((player) => player.teamId === team.id)
-  }));
+  (roomState?.teams ?? []).map((team) => {
+    const players = roomState.players.filter((player) => player.teamId === team.id);
+
+    return {
+      ...team,
+      players,
+      captainId: team.captainId ?? players[0]?.id ?? null,
+      captainName:
+        players.find((player) => player.id === (team.captainId ?? players[0]?.id))?.name ??
+        players[0]?.name ??
+        null,
+      readyCount: players.filter((player) => player.ready).length
+    };
+  });
 
 export const getStartHint = ({
   roomState,
