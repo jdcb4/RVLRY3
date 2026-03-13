@@ -1,74 +1,24 @@
 import { randomUUID } from 'node:crypto';
 import {
   applyGameAction,
-  buildWhoWhatWhereTeams,
   buildGameStartState,
-  DEFAULT_HATGAME_SETTINGS,
-  DEFAULT_WHOWHATWHERE_SETTINGS,
   getMinPlayersForGame,
   getWordTypeForGame
 } from './gameEngines/index.js';
+import {
+  getRoomGameModule
+} from './roomGameRegistry.js';
 
 const ROOM_REJOIN_WINDOW_MS = 2 * 60 * 1000;
-const MAX_HATGAME_CLUE_LENGTH = 80;
 
 const randomCode = () => Math.random().toString(36).slice(2, 8).toUpperCase();
 const normalizeCode = (code) => String(code ?? '').trim().toUpperCase();
 const normalizePlayerName = (playerName) => String(playerName ?? '').trim() || 'Player';
 const normalizeTeamName = (teamName, fallback) => String(teamName ?? '').trim() || fallback;
-
-const clampInteger = (value, minimum, maximum, fallback) => {
-  const parsed = Number.parseInt(value ?? '', 10);
-  if (!Number.isFinite(parsed)) {
-    return fallback;
-  }
-  return Math.min(maximum, Math.max(minimum, parsed));
-};
-
-const sanitizeWhoWhatWhereSettings = (settings = {}) => ({
-  teamCount: clampInteger(settings.teamCount, 2, 4, DEFAULT_WHOWHATWHERE_SETTINGS.teamCount),
-  turnDurationSeconds: clampInteger(settings.turnDurationSeconds, 15, 90, DEFAULT_WHOWHATWHERE_SETTINGS.turnDurationSeconds),
-  totalRounds: clampInteger(settings.totalRounds, 1, 8, DEFAULT_WHOWHATWHERE_SETTINGS.totalRounds),
-  freeSkips: clampInteger(settings.freeSkips, 0, 4, DEFAULT_WHOWHATWHERE_SETTINGS.freeSkips),
-  skipPenalty: clampInteger(settings.skipPenalty, 0, 3, DEFAULT_WHOWHATWHERE_SETTINGS.skipPenalty)
-});
-
-const sanitizeHatGameSettings = (settings = {}) => ({
-  teamCount: clampInteger(settings.teamCount, 2, 4, DEFAULT_HATGAME_SETTINGS.teamCount),
-  turnDurationSeconds: clampInteger(settings.turnDurationSeconds, 15, 120, DEFAULT_HATGAME_SETTINGS.turnDurationSeconds),
-  cluesPerPlayer: clampInteger(settings.cluesPerPlayer, 3, 10, DEFAULT_HATGAME_SETTINGS.cluesPerPlayer),
-  skipsPerTurn: clampInteger(settings.skipsPerTurn, 0, 5, DEFAULT_HATGAME_SETTINGS.skipsPerTurn)
-});
-
-const isWhoWhatWhereGameId = (gameId) => gameId === 'whowhatwhere';
-const isHatGameGameId = (gameId) => gameId === 'hatgame';
-const isTeamGameId = (gameId) => isWhoWhatWhereGameId(gameId) || isHatGameGameId(gameId);
-const usesTimedTurnsGameId = (gameId) => isWhoWhatWhereGameId(gameId) || isHatGameGameId(gameId);
-const needsStartWord = (gameId) => gameId === 'imposter' || gameId === 'drawnguess';
-
-const getDefaultSettingsForGame = (gameId) => {
-  if (isWhoWhatWhereGameId(gameId)) {
-    return { ...DEFAULT_WHOWHATWHERE_SETTINGS };
-  }
-
-  if (isHatGameGameId(gameId)) {
-    return { ...DEFAULT_HATGAME_SETTINGS };
-  }
-
-  return null;
-};
-
-const sanitizeSettingsForGame = (gameId, settings = {}) => {
-  if (isWhoWhatWhereGameId(gameId)) {
-    return sanitizeWhoWhatWhereSettings(settings);
-  }
-
-  if (isHatGameGameId(gameId)) {
-    return sanitizeHatGameSettings(settings);
-  }
-
-  return null;
-};
+const getRoomModule = (roomOrGameId) =>
+  getRoomGameModule(
+    typeof roomOrGameId === 'string' ? roomOrGameId : roomOrGameId?.gameId
+  );
 
 const createPlayer = ({
   playerToken,
@@ -114,37 +64,26 @@ const scheduleRoomExpiry = (rooms, room) => {
   }, ROOM_REJOIN_WINDOW_MS);
 };
 
-const sanitizeHatGameLobbyState = (room) => {
-  const clueSubmissions = room.lobbyState?.clueSubmissions ?? {};
-  const requiredCluesPerPlayer =
-    room.settings?.cluesPerPlayer ?? DEFAULT_HATGAME_SETTINGS.cluesPerPlayer;
-  const clueCountsByPlayerId = room.players.reduce((counts, player) => {
-    counts[player.id] = clueSubmissions[player.id]?.clues?.length ?? 0;
-    return counts;
-  }, {});
+const sanitizeRoom = (room) => {
+  const roomModule = getRoomModule(room);
 
   return {
-    requiredCluesPerPlayer,
-    clueCountsByPlayerId
+    code: room.code,
+    gameId: room.gameId,
+    phase: room.phase,
+    hostId: room.hostId,
+    players: room.players.map((player) => ({
+      id: player.id,
+      name: player.name,
+      ready: player.ready,
+      teamId: player.teamId ?? null
+    })),
+    teams: room.teams ? room.teams.map((team) => ({ ...team })) : undefined,
+    settings: room.settings ? { ...room.settings } : undefined,
+    lobbyState: roomModule.sanitizeLobbyState(room),
+    gamePublicState: room.gamePublicState
   };
 };
-
-const sanitizeRoom = (room) => ({
-  code: room.code,
-  gameId: room.gameId,
-  phase: room.phase,
-  hostId: room.hostId,
-  players: room.players.map((player) => ({
-    id: player.id,
-    name: player.name,
-    ready: player.ready,
-    teamId: player.teamId ?? null
-  })),
-  teams: room.teams ? room.teams.map((team) => ({ ...team })) : undefined,
-  settings: room.settings ? { ...room.settings } : undefined,
-  lobbyState: isHatGameGameId(room.gameId) ? sanitizeHatGameLobbyState(room) : undefined,
-  gamePublicState: room.gamePublicState
-});
 
 const emitRoomUpdate = (io, room) => {
   io.to(room.code).emit('room:update', sanitizeRoom(room));
@@ -230,21 +169,20 @@ const emitPrivateState = (io, room, player) => {
 };
 
 const emitLobbyPrivateState = (io, room, player) => {
-  if (!isHatGameGameId(room.gameId) || room.phase !== 'lobby') {
+  if (room.phase !== 'lobby') {
     return;
   }
 
-  const submittedClues = room.lobbyState?.clueSubmissions?.[player.id]?.clues ?? [];
-  const requiredCluesPerPlayer =
-    room.settings?.cluesPerPlayer ?? DEFAULT_HATGAME_SETTINGS.cluesPerPlayer;
+  const roomModule = getRoomModule(room);
+  const privateState = roomModule.getLobbyPrivateState(room, player);
+  if (!privateState) {
+    return;
+  }
 
   io.to(player.socketId).emit('room:private', {
     gameId: room.gameId,
     phase: room.phase,
-    clues: [...submittedClues],
-    submittedCount: submittedClues.length,
-    requiredCluesPerPlayer,
-    hasSubmitted: submittedClues.length === requiredCluesPerPlayer
+    ...privateState
   });
 };
 
@@ -262,10 +200,6 @@ const emitPlayerPrivateState = (io, room, player) => {
 
   emitLobbyPrivateState(io, room, player);
 };
-
-const isHatGameRoom = (room) => isHatGameGameId(room.gameId);
-const isTeamRoom = (room) => isTeamGameId(room.gameId);
-const usesTimedTurnsRoom = (room) => usesTimedTurnsGameId(room.gameId);
 
 const getLeastFilledTeamId = (room, teams = room.teams) => {
   const counts = new Map(teams.map((team) => [team.id, 0]));
@@ -290,7 +224,7 @@ const getLeastFilledTeamId = (room, teams = room.teams) => {
 };
 
 const autoAssignTeamPlayer = (room, player) => {
-  if (!isTeamRoom(room) || room.phase !== 'lobby' || room.teams.length === 0) {
+  if (!getRoomModule(room).usesTeams || room.phase !== 'lobby' || room.teams.length === 0) {
     return;
   }
 
@@ -302,12 +236,17 @@ const autoAssignTeamPlayer = (room, player) => {
 };
 
 const applyTeamCount = (room, nextTeamCount) => {
-  if (!isTeamRoom(room)) {
+  const roomModule = getRoomModule(room);
+  if (!roomModule.usesTeams) {
     return;
   }
 
+  const nextSettings = {
+    ...(room.settings ?? {}),
+    teamCount: nextTeamCount
+  };
   const existingTeams = room.teams ?? [];
-  const nextTeams = buildWhoWhatWhereTeams(nextTeamCount).map((team) => {
+  const nextTeams = roomModule.createTeams(nextSettings).map((team) => {
     const existing = existingTeams.find((entry) => entry.id === team.id);
     return existing ? { ...team, name: existing.name, score: 0 } : team;
   });
@@ -328,7 +267,11 @@ const applyTeamCount = (room, nextTeamCount) => {
 const scheduleTimedTurnExpiry = (rooms, io, room, wordStore) => {
   clearRoomGameTimer(room);
 
-  if (!usesTimedTurnsRoom(room) || room.phase !== 'in-progress' || room.gamePublicState?.stage !== 'turn') {
+  if (
+    !getRoomModule(room).usesTimedTurns ||
+    room.phase !== 'in-progress' ||
+    room.gamePublicState?.stage !== 'turn'
+  ) {
     return;
   }
 
@@ -343,7 +286,11 @@ const scheduleTimedTurnExpiry = (rooms, io, room, wordStore) => {
       return;
     }
 
-    if (!usesTimedTurnsRoom(room) || room.phase !== 'in-progress' || room.gamePublicState?.stage !== 'turn') {
+    if (
+      !getRoomModule(room).usesTimedTurns ||
+      room.phase !== 'in-progress' ||
+      room.gamePublicState?.stage !== 'turn'
+    ) {
       clearRoomGameTimer(room);
       return;
     }
@@ -387,54 +334,27 @@ const scheduleTimedTurnExpiry = (rooms, io, room, wordStore) => {
   }, delay + 25);
 };
 
-const createRoomState = ({ code, gameId, hostPlayer }) => ({
-  code,
-  gameId,
-  phase: 'lobby',
-  hostId: hostPlayer.id,
-  players: [hostPlayer],
-  nextSeat: 1,
-  rejoinSlots: new Map(),
-  gamePublicState: null,
-  gamePrivateState: new Map(),
-  gameInternalState: null,
-  teams: isTeamGameId(gameId) ? buildWhoWhatWhereTeams(getDefaultSettingsForGame(gameId).teamCount) : null,
-  settings: getDefaultSettingsForGame(gameId),
-  lobbyState: isHatGameGameId(gameId) ? { clueSubmissions: {} } : null,
-  gameTimer: null,
-  expiryTimer: null
-});
+const createRoomState = ({ code, gameId, hostPlayer }) => {
+  const roomModule = getRoomModule(gameId);
+  const settings = roomModule.getDefaultSettings();
 
-const getTeamRosterSize = (room, teamId) => room.players.filter((player) => player.teamId === teamId).length;
-
-const validateTeamRoomForStart = (room) => {
-  if (room.players.some((player) => !player.teamId)) {
-    return 'Every player must join a team before the game starts';
-  }
-
-  if (room.teams.some((team) => getTeamRosterSize(room, team.id) < 2)) {
-    return 'Each team needs at least 2 players';
-  }
-
-  return null;
-};
-
-const getHatGameSubmittedClueCount = (room, playerId) =>
-  room.lobbyState?.clueSubmissions?.[playerId]?.clues?.length ?? 0;
-
-const validateHatGameRoomForStart = (room) => {
-  const requiredCluesPerPlayer =
-    room.settings?.cluesPerPlayer ?? DEFAULT_HATGAME_SETTINGS.cluesPerPlayer;
-
-  if (
-    room.players.some(
-      (player) => getHatGameSubmittedClueCount(room, player.id) !== requiredCluesPerPlayer
-    )
-  ) {
-    return `Every player must submit ${requiredCluesPerPlayer} clues before the game starts`;
-  }
-
-  return null;
+  return {
+    code,
+    gameId,
+    phase: 'lobby',
+    hostId: hostPlayer.id,
+    players: [hostPlayer],
+    nextSeat: 1,
+    rejoinSlots: new Map(),
+    gamePublicState: null,
+    gamePrivateState: new Map(),
+    gameInternalState: null,
+    teams: roomModule.usesTeams ? roomModule.createTeams(settings) : null,
+    settings,
+    lobbyState: roomModule.createLobbyState(settings),
+    gameTimer: null,
+    expiryTimer: null
+  };
 };
 
 const resetRoomToLobby = (room) => {
@@ -448,7 +368,7 @@ const resetRoomToLobby = (room) => {
     player.ready = false;
   }
 
-  if (isTeamRoom(room) && room.teams) {
+  if (getRoomModule(room).usesTeams && room.teams) {
     room.teams = room.teams.map((team) => ({
       ...team,
       score: 0
@@ -549,7 +469,8 @@ export function registerRoomHandlers(io, wordStore) {
         return;
       }
 
-      if (!isTeamRoom(room)) {
+      const roomModule = getRoomModule(room);
+      if (!roomModule.usesTeams) {
         callback?.({ error: 'Teams are not used in this game' });
         return;
       }
@@ -583,7 +504,7 @@ export function registerRoomHandlers(io, wordStore) {
         return;
       }
 
-      if (!isTeamRoom(room)) {
+      if (!getRoomModule(room).usesTeams) {
         callback?.({ error: 'Team names are not used in this game' });
         return;
       }
@@ -623,7 +544,8 @@ export function registerRoomHandlers(io, wordStore) {
         return;
       }
 
-      if (!room.settings) {
+      const roomModule = getRoomModule(room);
+      if (!room.settings || !roomModule.sanitizeSettings) {
         callback?.({ error: 'This game does not expose room settings' });
         return;
       }
@@ -644,27 +566,19 @@ export function registerRoomHandlers(io, wordStore) {
         return;
       }
 
-      const nextSettings = sanitizeSettingsForGame(room.gameId, settings);
-      const teamCountChanged = nextSettings.teamCount !== room.settings.teamCount;
-      const cluesPerPlayerChanged =
-        isHatGameRoom(room) && nextSettings.cluesPerPlayer !== room.settings.cluesPerPlayer;
+      const previousSettings = room.settings;
+      const nextSettings = roomModule.sanitizeSettings(settings);
+      const teamCountChanged =
+        roomModule.usesTeams && nextSettings.teamCount !== previousSettings.teamCount;
       room.settings = nextSettings;
       if (teamCountChanged) {
         applyTeamCount(room, nextSettings.teamCount);
       }
 
-      if (cluesPerPlayerChanged) {
-        room.lobbyState = {
-          ...(room.lobbyState ?? {}),
-          clueSubmissions: {}
-        };
-        for (const roomPlayer of room.players) {
-          roomPlayer.ready = false;
-        }
-      }
+      roomModule.applySettingsSideEffects(room, previousSettings, nextSettings);
 
       emitRoomUpdate(io, room);
-      if (isHatGameRoom(room)) {
+      if (roomModule.getLobbyPrivateState(room, room.players[0] ?? {}) !== null) {
         emitAllLobbyPrivateStates(io, room);
       }
       callback?.({ ok: true });
@@ -677,7 +591,8 @@ export function registerRoomHandlers(io, wordStore) {
         return;
       }
 
-      if (!isHatGameRoom(room)) {
+      const roomModule = getRoomModule(room);
+      if (!roomModule.normalizeLobbyClues) {
         callback?.({ error: 'Clue submission is not used in this game' });
         return;
       }
@@ -693,24 +608,9 @@ export function registerRoomHandlers(io, wordStore) {
         return;
       }
 
-      const requiredCluesPerPlayer =
-        room.settings?.cluesPerPlayer ?? DEFAULT_HATGAME_SETTINGS.cluesPerPlayer;
-      const normalizedClues = Array.isArray(clues)
-        ? clues.map((clue) => String(clue ?? '').trim())
-        : [];
-
-      if (normalizedClues.length !== requiredCluesPerPlayer) {
-        callback?.({ error: `Submit exactly ${requiredCluesPerPlayer} clues` });
-        return;
-      }
-
-      if (normalizedClues.some((clue) => clue.length === 0)) {
-        callback?.({ error: 'Fill in every clue before submitting' });
-        return;
-      }
-
-      if (normalizedClues.some((clue) => clue.length > MAX_HATGAME_CLUE_LENGTH)) {
-        callback?.({ error: `Each clue must be ${MAX_HATGAME_CLUE_LENGTH} characters or fewer` });
+      const normalizedSubmission = roomModule.normalizeLobbyClues(room, clues);
+      if (normalizedSubmission.error) {
+        callback?.({ error: normalizedSubmission.error });
         return;
       }
 
@@ -719,7 +619,7 @@ export function registerRoomHandlers(io, wordStore) {
         clueSubmissions: {
           ...(room.lobbyState?.clueSubmissions ?? {}),
           [player.id]: {
-            clues: normalizedClues
+            clues: normalizedSubmission.clues
           }
         }
       };
@@ -747,18 +647,14 @@ export function registerRoomHandlers(io, wordStore) {
         return;
       }
 
-      if (Boolean(ready) && isTeamRoom(room) && !player.teamId) {
-        callback?.({ error: 'Join a team before marking ready' });
+      const validationError = getRoomModule(room).validateReady({
+        room,
+        player,
+        ready
+      });
+      if (validationError) {
+        callback?.({ error: validationError });
         return;
-      }
-
-      if (Boolean(ready) && isHatGameRoom(room)) {
-        const requiredCluesPerPlayer =
-          room.settings?.cluesPerPlayer ?? DEFAULT_HATGAME_SETTINGS.cluesPerPlayer;
-        if (getHatGameSubmittedClueCount(room, player.id) !== requiredCluesPerPlayer) {
-          callback?.({ error: 'Submit all of your clues before marking ready' });
-          return;
-        }
       }
 
       player.ready = Boolean(ready);
@@ -784,9 +680,11 @@ export function registerRoomHandlers(io, wordStore) {
         return;
       }
 
-      const minimumPlayers = isTeamRoom(room)
-        ? Math.max(getMinPlayersForGame(room.gameId), room.settings.teamCount * 2)
-        : getMinPlayersForGame(room.gameId);
+      const roomModule = getRoomModule(room);
+      const minimumPlayers = roomModule.getRequiredPlayerCount(
+        getMinPlayersForGame(room.gameId),
+        room.settings
+      );
       if (room.players.length < minimumPlayers) {
         callback?.({ error: `At least ${minimumPlayers} players are required` });
         return;
@@ -797,24 +695,14 @@ export function registerRoomHandlers(io, wordStore) {
         return;
       }
 
-      if (isTeamRoom(room)) {
-        const validationError = validateTeamRoomForStart(room);
-        if (validationError) {
-          callback?.({ error: validationError });
-          return;
-        }
-      }
-
-      if (isHatGameRoom(room)) {
-        const validationError = validateHatGameRoomForStart(room);
-        if (validationError) {
-          callback?.({ error: validationError });
-          return;
-        }
+      const validationError = roomModule.validateStart(room);
+      if (validationError) {
+        callback?.({ error: validationError });
+        return;
       }
 
       let word = null;
-      if (needsStartWord(room.gameId)) {
+      if (roomModule.needsStartWord) {
         const wordType = getWordTypeForGame(room.gameId);
         word = wordStore.getRandomWord(wordType);
 
@@ -926,7 +814,7 @@ export function registerRoomHandlers(io, wordStore) {
 
       resetRoomToLobby(room);
       emitRoomUpdate(io, room);
-      if (isHatGameRoom(room)) {
+      if (getRoomModule(room).getLobbyPrivateState(room, room.players[0] ?? {}) !== null) {
         emitAllLobbyPrivateStates(io, room);
       }
       callback?.({ ok: true });

@@ -13,6 +13,106 @@ export function SummaryChips({ items }) {
   );
 }
 
+export function TeamScoreboard({
+  title = 'Scoreboard',
+  description = null,
+  teams,
+  activeTeamId = null,
+  children = null
+}) {
+  return (
+    <section className="panel panel--stacked">
+      <div className="panel-heading">
+        <h2>{title}</h2>
+        {description ? <p>{description}</p> : null}
+      </div>
+
+      <ul className="player-list">
+        {teams.map((team) => (
+          <li key={team.id} className="player-row player-row--compact">
+            <div className="player-row__identity">
+              <span className="player-row__name">{team.name}</span>
+              <span className="helper-text">
+                {team.players.map((player) => player.name).join(', ') || 'No players'}
+              </span>
+            </div>
+            <span className={team.id === activeTeamId ? 'badge badge--ready' : 'badge'}>
+              {team.score} pts
+            </span>
+          </li>
+        ))}
+      </ul>
+
+      {children}
+    </section>
+  );
+}
+
+export function LeaderboardList({ leaderboard, winnerTeamIds = [] }) {
+  return (
+    <ul className="player-list">
+      {leaderboard.map((entry) => (
+        <li key={entry.teamId} className="player-row player-row--compact">
+          <div className="player-row__identity">
+            <span className="player-row__name">{entry.teamName}</span>
+            <span className="helper-text">
+              {winnerTeamIds.includes(entry.teamId) ? 'Top score' : 'Final standing'}
+            </span>
+          </div>
+          <span className={winnerTeamIds.includes(entry.teamId) ? 'badge badge--ready' : 'badge'}>
+            {entry.score} pts
+          </span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+export function TurnSummaryPanel({
+  summary,
+  entries = null,
+  getEntryKey = (entry, index) => `${index}`,
+  getEntryLabel = (entry) => entry.word ?? entry.clue ?? '',
+  getEntryStatus = (entry) => entry.status
+}) {
+  if (!summary) {
+    return null;
+  }
+
+  return (
+    <div className="field-stack">
+      <div className="panel-heading">
+        <h3>Latest turn</h3>
+        <p>
+          {summary.teamName} with {summary.describerName}
+        </p>
+      </div>
+      <SummaryChips
+        items={[
+          { label: 'Score change', value: summary.scoreDelta },
+          { label: 'Correct', value: summary.correctCount },
+          { label: 'Skipped', value: summary.skippedCount }
+        ]}
+      />
+
+      {entries?.length ? (
+        <ul className="player-list">
+          {entries.map((entry, index) => (
+            <li key={getEntryKey(entry, index)} className="player-row player-row--compact">
+              <div className="player-row__identity">
+                <span className="player-row__name">{getEntryLabel(entry)}</span>
+              </div>
+              <span className={getEntryStatus(entry) === 'correct' ? 'badge badge--ready' : 'badge'}>
+                {getEntryStatus(entry) === 'correct' ? 'Correct' : 'Skipped'}
+              </span>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+    </div>
+  );
+}
+
 export function DrawingPad({
   prompt,
   disabled,
