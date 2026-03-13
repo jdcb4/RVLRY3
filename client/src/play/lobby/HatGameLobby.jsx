@@ -1,9 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { fetchHatGameSuggestions } from '../../games/contentApi';
+import { InfoIcon, ShuffleIcon, UsersIcon } from '../../components/Icons';
 import { HATGAME_MAX_CLUE_LENGTH, buildTeamRosters } from './helpers';
-import {
-  TeamCard
-} from './common';
+import { LobbyDisclosure, TeamCard } from './common';
 
 export function HatGameLobby({
   roomCode,
@@ -17,6 +16,7 @@ export function HatGameLobby({
   updateSetting,
   updateTeamName,
   assignTeam,
+  rebalanceTeams,
   lobbyPrivateState,
   submitHatClues,
   setError,
@@ -53,6 +53,8 @@ export function HatGameLobby({
         : Array.from({ length: requiredClues }, () => '');
     });
   }, [lobbyPrivateState?.clues, requiredClues]);
+
+  const savedCount = lobbyPrivateState?.submittedCount ?? 0;
 
   const handleGenerateSuggestions = async () => {
     setError('');
@@ -99,10 +101,18 @@ export function HatGameLobby({
     }
   };
 
+  const handleRebalance = async () => {
+    const response = await rebalanceTeams(roomCode);
+    if (response.ok) {
+      onToast('Teams rebalanced');
+    }
+  };
+
   return (
     <section className="panel panel--stacked">
       <div className="panel-heading">
-        <h2>Teams and clues</h2>
+        <h2>Teams</h2>
+        <p>Join a team first, then finish your clue pack.</p>
       </div>
 
       {error && <p className="connection-banner connection-banner--error">{error}</p>}
@@ -124,12 +134,12 @@ export function HatGameLobby({
         ))}
       </div>
 
-      <section className="settings-card">
-        <div className="panel-heading">
-          <h3>Round settings</h3>
-        </div>
-
-        <div className="settings-grid">
+      <LobbyDisclosure
+        title="Team options"
+        summary={`${settingsForm.teamCount} teams`}
+        icon={<UsersIcon />}
+      >
+        <div className="field-stack">
           <label className="settings-field">
             <span className="helper-text">Teams</span>
             <select
@@ -143,6 +153,25 @@ export function HatGameLobby({
             </select>
           </label>
 
+          {isHost ? (
+            <button
+              className="secondary-action"
+              disabled={pendingAction === 'rebalance-teams'}
+              onClick={handleRebalance}
+            >
+              <ShuffleIcon />
+              Rebalance teams
+            </button>
+          ) : null}
+        </div>
+      </LobbyDisclosure>
+
+      <LobbyDisclosure
+        title="Round options"
+        summary={`${settingsForm.turnDurationSeconds}s turns, ${settingsForm.cluesPerPlayer} clues each`}
+        icon={<InfoIcon />}
+      >
+        <div className="settings-grid">
           <label className="settings-field">
             <span className="helper-text">Turn length</span>
             <select
@@ -198,14 +227,14 @@ export function HatGameLobby({
             </select>
           </label>
         </div>
-      </section>
+      </LobbyDisclosure>
 
-      <section className="settings-card">
-        <div className="panel-heading">
-          <h3>Your clue pack</h3>
-          <p>Use person names only.</p>
-        </div>
-
+      <LobbyDisclosure
+        title="Your clues"
+        summary={`${savedCount} / ${requiredClues} saved on this device`}
+        icon={<InfoIcon />}
+        open={savedCount < requiredClues}
+      >
         <div className="field-stack">
           {clueDrafts.map((clue, index) => (
             <label key={`hat-clue-${index}`} className="settings-field">
@@ -226,26 +255,19 @@ export function HatGameLobby({
             disabled={loadingSuggestions}
             onClick={handleGenerateSuggestions}
           >
-            {loadingSuggestions ? 'Loading suggestions' : 'Generate from Who list'}
+            {loadingSuggestions ? 'Loading suggestions' : 'Who list'}
           </button>
-          <button
-            disabled={pendingAction === 'submit-hat-clues'}
-            onClick={handleSubmit}
-          >
-            Save clue pack
+          <button disabled={pendingAction === 'submit-hat-clues'} onClick={handleSubmit}>
+            Save clues
           </button>
         </div>
+      </LobbyDisclosure>
 
-        <p className="helper-text">
-          Saved for this device: {lobbyPrivateState?.submittedCount ?? 0} / {requiredClues}
-        </p>
-      </section>
-
-      <section className="settings-card">
-        <div className="panel-heading">
-          <h3>Submission status</h3>
-        </div>
-
+      <LobbyDisclosure
+        title="Submission status"
+        summary={`${Object.values(clueCountsByPlayerId).filter((count) => count === requiredClues).length} ready`}
+        icon={<InfoIcon />}
+      >
         <ul className="player-list">
           {roomState.players.map((player) => {
             const clueCount = clueCountsByPlayerId[player.id] ?? 0;
@@ -267,7 +289,7 @@ export function HatGameLobby({
             );
           })}
         </ul>
-      </section>
+      </LobbyDisclosure>
     </section>
   );
 }

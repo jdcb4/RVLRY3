@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
+import { ArrowLeftIcon, InfoIcon, PhoneIcon } from '../components/Icons';
 import { usePlaySession } from './PlaySessionContext';
 
 export function GameLanding() {
@@ -45,60 +46,56 @@ export function GameLanding() {
     }
   };
 
-  const joinLabel = inviteRoomCode ? `Join ${inviteRoomCode}` : 'Join room';
-
   return (
     <main className="scene scene--landing">
       <header className="scene__header scene__header--compact">
+        <div className="scene__header-row scene__header-row--between">
+          <Link aria-label="Back to RVLRY hub" className="scene__back scene__back--icon" to="/">
+            <ArrowLeftIcon />
+          </Link>
+          <p className={connectionState === 'connected' ? 'status-pill' : 'status-pill status-pill--muted'}>
+            {connectionState === 'connected' ? 'Server live' : 'Connecting'}
+          </p>
+        </div>
         <p className="scene__eyebrow">{game.tagline}</p>
         <h1 className="scene__title">{game.name}</h1>
-        <p className="scene__lead">{game.description}</p>
-        <div className="facts-row">
-          <span className="fact-chip">{game.minPlayers}+ players</span>
-          <span className="fact-chip">{game.supportsLocal ? 'Online + pass-and-play' : 'Online only'}</span>
-          <span className="fact-chip">Room-code join</span>
-        </div>
       </header>
 
       <div className="panel-grid panel-grid--landing">
         <section className="panel panel--hero panel--stacked">
           <div className="panel-heading">
-            <p className={connectionState === 'connected' ? 'status-pill' : 'status-pill status-pill--muted'}>
-              {connectionState === 'connected' ? 'Server live' : 'Connecting'}
-            </p>
-            <h2>{inviteRoomCode ? `Join room ${inviteRoomCode}` : 'Play online'}</h2>
-            <p>Save your name, then create or join with a code.</p>
+            <h2>{inviteRoomCode ? `Join ${inviteRoomCode}` : 'Play online'}</h2>
+            <p>Set your name, then create a room or enter a code.</p>
           </div>
 
-          {currentRoomTarget && (
+          {currentRoomTarget ? (
             <div className="notice-card">
-              <strong>Current session found</strong>
-              <p>{roomState.phase === 'in-progress' ? 'Game' : 'Lobby'} {roomState.code} is already on this device.</p>
+              <strong>Session found</strong>
+              <p>{roomState.phase === 'in-progress' ? 'Jump back into the game already on this phone.' : 'Return to the lobby already on this phone.'}</p>
               <div className="actions">
                 <Link className="button-link button-link--secondary" to={currentRoomTarget}>
                   Return to {roomState.code}
                 </Link>
               </div>
             </div>
-          )}
+          ) : null}
 
-          {!currentRoomTarget && lastRoomCode && (
+          {!currentRoomTarget && lastRoomCode ? (
             <div className="notice-card">
               <strong>Quick rejoin</strong>
-              <p>Jump back into your last room without typing the code again.</p>
               <div className="actions">
                 <button className="secondary-action" onClick={() => handleJoinRoom(lastRoomCode)}>
                   Rejoin {lastRoomCode}
                 </button>
               </div>
             </div>
-          )}
+          ) : null}
 
           <div className="field-stack">
-            <label>
-              <span className="helper-text">Player name</span>
+            <label className="settings-field">
+              <span className="helper-text">Name</span>
               <input
-                placeholder="What should the room call you?"
+                placeholder="Player name"
                 value={playerName}
                 onChange={(event) => {
                   setError('');
@@ -107,10 +104,10 @@ export function GameLanding() {
               />
             </label>
 
-            <label>
+            <label className="settings-field">
               <span className="helper-text">Room code</span>
               <input
-                placeholder="Enter six-character code"
+                placeholder="Six-character code"
                 value={joinCode}
                 maxLength={6}
                 onChange={(event) => {
@@ -128,37 +125,63 @@ export function GameLanding() {
               Create room
             </button>
             <button className="secondary-action" disabled={pendingAction === 'join'} onClick={() => handleJoinRoom()}>
-              {joinLabel}
+              Join room
             </button>
           </div>
-
-          <p className="helper-text">Your name stays on this device. Share the code or lobby link after you join.</p>
         </section>
 
         <section className="panel panel--stacked">
-          <div className="panel-heading">
-            <h2>How to play</h2>
-          </div>
+          <details className="disclosure" open={Boolean(inviteRoomCode)}>
+            <summary className="disclosure__summary">
+              <div className="disclosure__summary-copy">
+                <div className="disclosure__summary-title">
+                  <span className="disclosure__icon">
+                    <InfoIcon />
+                  </span>
+                  <h2>How it works</h2>
+                </div>
+                <p>Three quick steps</p>
+              </div>
+            </summary>
+            <div className="disclosure__body">
+              <ol className="step-list">
+                {game.howToPlay.map((item, index) => (
+                  <li key={item} className="step-card">
+                    <span className="step-card__index">0{index + 1}</span>
+                    <span>{item}</span>
+                  </li>
+                ))}
+              </ol>
+            </div>
+          </details>
 
-          <ol className="step-list">
-            {game.howToPlay.map((item, index) => (
-              <li key={item} className="step-card">
-                <span className="step-card__index">0{index + 1}</span>
-                <span>{item}</span>
-              </li>
-            ))}
-          </ol>
-
-          <div className="actions actions--stretch">
-            {game.supportsLocal && (
-              <Link className="button-link button-link--secondary" to={`/local/${game.id}`}>
-                Pass and play instead
-              </Link>
-            )}
-            <Link className="button-link button-link--secondary" to="/">
-              Back to RVLRY hub
-            </Link>
-          </div>
+          {game.supportsLocal ? (
+            <details className="disclosure">
+              <summary className="disclosure__summary">
+                <div className="disclosure__summary-copy">
+                  <div className="disclosure__summary-title">
+                    <span className="disclosure__icon">
+                      <PhoneIcon />
+                    </span>
+                    <h2>Pass and play</h2>
+                  </div>
+                  <p>Single-phone setup</p>
+                </div>
+              </summary>
+              <div className="disclosure__body">
+                <div className="notice-card">
+                  <strong>Local mode</strong>
+                  <p>Use one phone, pass it between turns, and keep hidden information protected.</p>
+                </div>
+                <div className="actions">
+                  <Link className="button-link button-link--secondary" to={`/local/${game.id}`}>
+                    <PhoneIcon />
+                    Open local mode
+                  </Link>
+                </div>
+              </div>
+            </details>
+          ) : null}
         </section>
       </div>
     </main>

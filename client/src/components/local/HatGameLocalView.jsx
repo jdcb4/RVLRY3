@@ -221,12 +221,14 @@ export function HatGameLocalView({
         <HandoffPanel
           pill="Pass to describer"
           title={`Give the phone to ${context.activeDescriberName}`}
+          targetName={context.activeDescriberName}
           description={`${
             context.activeTeam?.name ?? 'The next team'
           } should be ready to guess before the clock starts.`}
           isRevealed={handoffVisible}
           onReveal={() => setHandoffVisible(true)}
           onHide={() => setHandoffVisible(false)}
+          revealLabel="Describer ready"
           footer={
             handoffVisible ? (
               <button disabled={busyAction === 'start-turn'} onClick={onStartTurn}>
@@ -242,7 +244,15 @@ export function HatGameLocalView({
         </HandoffPanel>
       </section>
 
-      <TeamScoreboard teams={teamRosters} activeTeamId={context.activeTeamId}>
+      <TeamScoreboard
+        summary={
+          session.stage === 'turn'
+            ? `${context.activeTeam?.name ?? 'Active team'} up`
+            : `Phase ${session.phaseNumber}`
+        }
+        teams={teamRosters}
+        activeTeamId={context.activeTeamId}
+      >
         <TurnSummaryPanel summary={session.lastTurnSummary} />
       </TeamScoreboard>
     </div>

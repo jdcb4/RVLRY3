@@ -267,7 +267,7 @@ export function WhoWhatWherePlay({
       </section>
 
       <TeamScoreboard
-        description="Scores and the latest turn stay here."
+        summary={activeTeam?.name ? `${activeTeam.name} up` : `${teamRosters.length} teams`}
         teams={teamRosters}
         activeTeamId={publicState.activeTeamId}
       >

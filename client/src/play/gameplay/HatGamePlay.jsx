@@ -327,7 +327,11 @@ export function HatGamePlay({
       </section>
 
       <TeamScoreboard
-        description="Scores and phase progress stay here."
+        summary={
+          stage === 'turn'
+            ? `${activeTeam?.name ?? 'Active team'} up`
+            : `Phase ${publicState.phaseNumber}`
+        }
         teams={teamRosters}
         activeTeamId={publicState.activeTeamId}
       >

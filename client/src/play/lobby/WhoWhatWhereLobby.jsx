@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
-import { TeamCard } from './common';
+import { InfoIcon, ShuffleIcon, UsersIcon } from '../../components/Icons';
 import { buildTeamRosters } from './helpers';
+import { LobbyDisclosure, TeamCard } from './common';
 
 export function WhoWhatWhereLobby({
   roomCode,
@@ -14,14 +15,24 @@ export function WhoWhatWhereLobby({
   updateSetting,
   updateTeamName,
   assignTeam,
-  error
+  rebalanceTeams,
+  error,
+  onToast
 }) {
   const teamRosters = useMemo(() => buildTeamRosters(roomState), [roomState]);
+
+  const handleRebalance = async () => {
+    const response = await rebalanceTeams(roomCode);
+    if (response.ok) {
+      onToast('Teams rebalanced');
+    }
+  };
 
   return (
     <section className="panel panel--stacked">
       <div className="panel-heading">
         <h2>Teams</h2>
+        <p>Pick a team. The host can rebalance if the room gets uneven.</p>
       </div>
 
       {error && <p className="connection-banner connection-banner--error">{error}</p>}
@@ -43,12 +54,12 @@ export function WhoWhatWhereLobby({
         ))}
       </div>
 
-      <section className="settings-card">
-        <div className="panel-heading">
-          <h3>Match settings</h3>
-        </div>
-
-        <div className="settings-grid">
+      <LobbyDisclosure
+        title="Team options"
+        summary={`${settingsForm.teamCount} teams`}
+        icon={<UsersIcon />}
+      >
+        <div className="field-stack">
           <label className="settings-field">
             <span className="helper-text">Teams</span>
             <select
@@ -62,6 +73,25 @@ export function WhoWhatWhereLobby({
             </select>
           </label>
 
+          {isHost ? (
+            <button
+              className="secondary-action"
+              disabled={pendingAction === 'rebalance-teams'}
+              onClick={handleRebalance}
+            >
+              <ShuffleIcon />
+              Rebalance teams
+            </button>
+          ) : null}
+        </div>
+      </LobbyDisclosure>
+
+      <LobbyDisclosure
+        title="Match options"
+        summary={`${settingsForm.turnDurationSeconds}s turns, ${settingsForm.totalRounds} rounds`}
+        icon={<InfoIcon />}
+      >
+        <div className="settings-grid">
           <label className="settings-field">
             <span className="helper-text">Turn length</span>
             <select
@@ -117,7 +147,7 @@ export function WhoWhatWhereLobby({
             </select>
           </label>
         </div>
-      </section>
+      </LobbyDisclosure>
     </section>
   );
 }

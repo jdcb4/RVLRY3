@@ -1,4 +1,5 @@
 import { useAudioCues } from './AudioCueContext';
+import { VolumeOffIcon, VolumeOnIcon } from '../components/Icons';
 
 export function SoundToggle({ compact = false }) {
   const { audioEnabled, setAudioEnabled, playCue, primeAudio } = useAudioCues();
@@ -15,10 +16,12 @@ export function SoundToggle({ compact = false }) {
   return (
     <button
       type="button"
-      className={`topbar__pill topbar__pill--button ${compact ? 'topbar__pill--compact' : ''}`}
+      aria-label={audioEnabled ? 'Mute sound effects' : 'Enable sound effects'}
+      title={audioEnabled ? 'Mute sound effects' : 'Enable sound effects'}
+      className={`topbar__pill topbar__pill--button topbar__pill--icon ${compact ? 'topbar__pill--compact' : ''}`}
       onClick={handleToggle}
     >
-      {audioEnabled ? 'Sound on' : 'Sound off'}
+      {audioEnabled ? <VolumeOnIcon /> : <VolumeOffIcon />}
     </button>
   );
 }

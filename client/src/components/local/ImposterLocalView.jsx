@@ -39,6 +39,7 @@ export function ImposterLocalView({
         <HandoffPanel
           pill={`Role reveal ${session.revealIndex + 1} / ${session.players.length}`}
           title={`Pass to ${activePlayer.name}`}
+          targetName={activePlayer.name}
           description="Only this player should see the reveal before the phone moves on."
           isRevealed={isRevealed}
           onReveal={() => setIsRevealed(true)}
@@ -71,40 +72,50 @@ export function ImposterLocalView({
   if (session.stage === 'clues' && activePlayer) {
     return (
       <div className="gameplay-stack">
-        <section className="panel panel--hero panel--stacked gameplay-primary">
-          <div className="panel-heading">
-            <p className="status-pill">Clue round</p>
-            <h2>{activePlayer.name} is up</h2>
-            <p>Say the clue, then log it here.</p>
-          </div>
+        <HandoffPanel
+          pill={`Clue ${session.clueIndex + 1} / ${session.players.length}`}
+          title={`Pass to ${activePlayer.name}`}
+          targetName={activePlayer.name}
+          description="Only this player should enter the clue before the phone moves on."
+          isRevealed={isRevealed}
+          onReveal={() => setIsRevealed(true)}
+          onHide={() => setIsRevealed(false)}
+        >
+          <div className="field-stack">
+            <div className="panel-heading">
+              <p className="status-pill">Clue round</p>
+              <h2>{activePlayer.name} is up</h2>
+              <p>Say the clue, then log it here.</p>
+            </div>
 
-          <SummaryChips
-            items={[
-              {
-                label: 'Clue turn',
-                value: `${session.clueIndex + 1} / ${session.players.length}`
-              },
-              { label: 'Clues logged', value: session.clues.length },
-              { label: 'Players', value: session.players.length }
-            ]}
-          />
-
-          <label className="settings-field">
-            <span className="helper-text">Clue from {activePlayer.name}</span>
-            <input
-              placeholder="Short clue for the room"
-              maxLength={MAX_LOCAL_CLUE_LENGTH}
-              value={clueText}
-              onChange={(event) => setClueText(event.target.value)}
+            <SummaryChips
+              items={[
+                {
+                  label: 'Clue turn',
+                  value: `${session.clueIndex + 1} / ${session.players.length}`
+                },
+                { label: 'Clues logged', value: session.clues.length },
+                { label: 'Players', value: session.players.length }
+              ]}
             />
-          </label>
 
-          <button
-            onClick={() => applyAction({ type: 'submit-clue', payload: { text: clueText } })}
-          >
-            Save clue
-          </button>
-        </section>
+            <label className="settings-field">
+              <span className="helper-text">Clue from {activePlayer.name}</span>
+              <input
+                placeholder="Short clue for the room"
+                maxLength={MAX_LOCAL_CLUE_LENGTH}
+                value={clueText}
+                onChange={(event) => setClueText(event.target.value)}
+              />
+            </label>
+
+            <button
+              onClick={() => applyAction({ type: 'submit-clue', payload: { text: clueText } })}
+            >
+              Save clue
+            </button>
+          </div>
+        </HandoffPanel>
 
         <section className="panel panel--stacked">
           <div className="panel-heading">
@@ -146,6 +157,7 @@ export function ImposterLocalView({
         <HandoffPanel
           pill={`Secret vote ${session.votingIndex + 1} / ${session.players.length}`}
           title={`Pass to ${activePlayer.name}`}
+          targetName={activePlayer.name}
           description="Keep each vote private until everyone has chosen."
           isRevealed={isRevealed}
           onReveal={() => setIsRevealed(true)}

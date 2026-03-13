@@ -7,12 +7,18 @@ export function HandoffPanel({
   pill,
   title,
   description,
+  targetName,
   isRevealed,
   onReveal,
   onHide,
   children,
-  footer = null
+  footer = null,
+  revealLabel,
+  hideLabel = 'Hide screen'
 }) {
+  const nextRevealLabel =
+    revealLabel ?? (targetName ? `${targetName} ready` : 'Ready');
+
   return (
     <section className="panel panel--hero panel--stacked">
       <div className="panel-heading">
@@ -23,8 +29,8 @@ export function HandoffPanel({
 
       {!isRevealed ? (
         <div className="notice-card local-handoff">
-          <strong>Keep this hidden while you pass the device.</strong>
-          <p>Reveal only when the correct player has the phone and everyone else looks away.</p>
+          <strong>{targetName ? `Pass phone to ${targetName}.` : 'Pass the phone.'}</strong>
+          <p>{targetName ? `${targetName} taps ready when everyone else is looking away.` : 'Reveal only when the correct player has the phone.'}</p>
         </div>
       ) : (
         children
@@ -32,7 +38,7 @@ export function HandoffPanel({
 
       <div className="actions actions--stretch">
         <button onClick={isRevealed ? onHide : onReveal}>
-          {isRevealed ? 'Hide again' : 'Reveal'}
+          {isRevealed ? hideLabel : nextRevealLabel}
         </button>
         {footer}
       </div>
@@ -47,14 +53,17 @@ export function LocalPlayersEditor({
   onTeamChange,
   onAddPlayer,
   onRemovePlayer,
-  onAutoBalance
+  onAutoBalance,
+  showHeading = true
 }) {
   return (
     <section className="panel panel--stacked">
-      <div className="panel-heading">
-        <h2>Players</h2>
-        <p>Name everyone first so handoffs stay clear.</p>
-      </div>
+      {showHeading ? (
+        <div className="panel-heading">
+          <h2>Players</h2>
+          <p>Name everyone first so handoffs stay clear.</p>
+        </div>
+      ) : null}
 
       <div className="local-toolbar">
         <button
@@ -119,56 +128,70 @@ export function LocalHatGameClueEditor({
   cluesPerPlayer,
   busyAction,
   onChangeClue,
-  onGenerateClues
+  onGenerateClues,
+  showHeading = true
 }) {
   return (
     <section className="panel panel--stacked">
-      <div className="panel-heading">
-        <h2>Clue packs</h2>
-        <p>Add person names here. The Who list button gives each player an editable draft.</p>
-      </div>
+      {showHeading ? (
+        <div className="panel-heading">
+          <h2>Clue packs</h2>
+          <p>Add person names here. The Who list button gives each player an editable draft.</p>
+        </div>
+      ) : null}
 
       <div className="local-player-grid">
         {players.map((player) => {
           const clues =
             clueSubmissions[player.id]?.clues ?? buildEmptyHatGameClues(cluesPerPlayer);
+          const readyCount = clues.filter((clue) => clue.trim().length > 0).length;
+          const isComplete = readyCount === cluesPerPlayer;
 
           return (
-            <article key={`hat-setup-${player.id}`} className="local-player-card">
-              <div className="panel-heading">
-                <h3>{player.name}</h3>
-                <p>
-                  {clues.filter((clue) => clue.trim().length > 0).length} /{' '}
-                  {cluesPerPlayer} ready
-                </p>
-              </div>
+            <details
+              key={`hat-setup-${player.id}`}
+              className="local-player-card disclosure disclosure--subtle"
+              open={!isComplete}
+            >
+              <summary className="disclosure__summary disclosure__summary--compact">
+                <div className="disclosure__summary-copy">
+                  <h3>{player.name}</h3>
+                  <p>
+                    {readyCount} / {cluesPerPlayer} ready
+                  </p>
+                </div>
+                <span className={isComplete ? 'badge badge--ready' : 'badge'}>
+                  {isComplete ? 'Ready' : 'Editing'}
+                </span>
+              </summary>
+              <div className="disclosure__body field-stack">
+                <div className="field-stack">
+                  {clues.map((clue, index) => (
+                    <label key={`${player.id}-clue-${index}`} className="settings-field">
+                      <span className="helper-text">Clue {index + 1}</span>
+                      <input
+                        value={clue}
+                        maxLength={MAX_LOCAL_HATGAME_CLUE_LENGTH}
+                        placeholder="Enter a person name"
+                        onChange={(event) =>
+                          onChangeClue(player.id, index, event.target.value)
+                        }
+                      />
+                    </label>
+                  ))}
+                </div>
 
-              <div className="field-stack">
-                {clues.map((clue, index) => (
-                  <label key={`${player.id}-clue-${index}`} className="settings-field">
-                    <span className="helper-text">Clue {index + 1}</span>
-                    <input
-                      value={clue}
-                      maxLength={MAX_LOCAL_HATGAME_CLUE_LENGTH}
-                      placeholder="Enter a person name"
-                      onChange={(event) =>
-                        onChangeClue(player.id, index, event.target.value)
-                      }
-                    />
-                  </label>
-                ))}
+                <button
+                  className="secondary-action"
+                  disabled={busyAction === `generate-hat-clues:${player.id}`}
+                  onClick={() => onGenerateClues(player.id)}
+                >
+                  {busyAction === `generate-hat-clues:${player.id}`
+                    ? 'Loading suggestions'
+                    : 'Generate from Who list'}
+                </button>
               </div>
-
-              <button
-                className="secondary-action"
-                disabled={busyAction === `generate-hat-clues:${player.id}`}
-                onClick={() => onGenerateClues(player.id)}
-              >
-                {busyAction === `generate-hat-clues:${player.id}`
-                  ? 'Loading suggestions'
-                  : 'Generate from Who list'}
-              </button>
-            </article>
+            </details>
           );
         })}
       </div>
@@ -189,12 +212,14 @@ export function ResultsActions({ onPlayAgain, onResetSetup, busyAction }) {
   );
 }
 
-export function WhoWhatWhereSettingsCard({ settings, onChange }) {
+export function WhoWhatWhereSettingsCard({ settings, onChange, showHeading = true }) {
   return (
     <section className="settings-card">
-      <div className="panel-heading">
-        <h3>Match settings</h3>
-      </div>
+      {showHeading ? (
+        <div className="panel-heading">
+          <h3>Match settings</h3>
+        </div>
+      ) : null}
 
       <div className="settings-grid">
         <label className="settings-field">
@@ -274,12 +299,14 @@ export function WhoWhatWhereSettingsCard({ settings, onChange }) {
   );
 }
 
-export function HatGameSettingsCard({ settings, onChange }) {
+export function HatGameSettingsCard({ settings, onChange, showHeading = true }) {
   return (
     <section className="settings-card">
-      <div className="panel-heading">
-        <h3>Round settings</h3>
-      </div>
+      {showHeading ? (
+        <div className="panel-heading">
+          <h3>Round settings</h3>
+        </div>
+      ) : null}
 
       <div className="settings-grid">
         <label className="settings-field">

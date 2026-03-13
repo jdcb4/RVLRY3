@@ -537,6 +537,41 @@ export function registerRoomHandlers(io, wordStore) {
       callback?.({ ok: true });
     });
 
+    socket.on('room:rebalance-teams', ({ code }, callback) => {
+      const room = rooms.get(normalizeCode(code));
+      if (!room) {
+        callback?.({ error: 'Room not found' });
+        return;
+      }
+
+      const roomModule = getRoomModule(room);
+      if (!roomModule.usesTeams) {
+        callback?.({ error: 'Teams are not used in this game' });
+        return;
+      }
+
+      if (room.phase !== 'lobby') {
+        callback?.({ error: 'Teams can only be rebalanced in the lobby' });
+        return;
+      }
+
+      const player = getPlayerBySocketId(room, socket.id);
+      if (!player) {
+        callback?.({ error: 'Player not found in room' });
+        return;
+      }
+
+      if (room.hostId !== player.id) {
+        callback?.({ error: 'Only the host can rebalance teams' });
+        return;
+      }
+
+      applyTeamCount(room, room.settings?.teamCount ?? 2);
+      emitRoomUpdate(io, room);
+      emitAllLobbyPrivateStates(io, room);
+      callback?.({ ok: true });
+    });
+
     socket.on('room:update-settings', ({ code, settings }, callback) => {
       const room = rooms.get(normalizeCode(code));
       if (!room) {

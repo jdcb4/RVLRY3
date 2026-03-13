@@ -381,6 +381,58 @@ describe.sequential('RVLRY server integration', () => {
     await waitFor(() => host.state.room.phase === 'lobby', 'whowhatwhere room to return to lobby');
   });
 
+  it('rebalances team games from the lobby for the host', async () => {
+    harnesses = await Promise.all(Array.from({ length: 4 }, () => connectHarness(baseUrl)));
+    const [host, ...guests] = harnesses;
+
+    const createdRoom = await host.emit('room:create', {
+      gameId: 'whowhatwhere',
+      playerName: 'Alex',
+      playerToken: 'rebalance-host'
+    });
+    host.playerId = createdRoom.playerId;
+    const roomCode = createdRoom.code;
+
+    const guestNames = ['Blair', 'Casey', 'Drew'];
+    for (const [index, guest] of guests.entries()) {
+      const joinedRoom = await guest.emit('room:join', {
+        code: roomCode,
+        playerName: guestNames[index],
+        playerToken: `rebalance-guest-${index}`
+      });
+      guest.playerId = joinedRoom.playerId;
+    }
+
+    await waitFor(() => host.state.room?.players?.length === 4, 'all rebalance players to join');
+
+    const firstTeamId = host.state.room.teams[0].id;
+    for (const harness of harnesses) {
+      const response = await harness.emit('room:assign-team', {
+        code: roomCode,
+        teamId: firstTeamId
+      });
+      expect(response.ok).toBe(true);
+    }
+
+    await waitFor(
+      () => host.state.room.players.every((player) => player.teamId === firstTeamId),
+      'all players stacked on one team'
+    );
+
+    const rebalanced = await host.emit('room:rebalance-teams', { code: roomCode });
+    expect(rebalanced.ok).toBe(true);
+
+    await waitFor(
+      () => {
+        const counts = host.state.room.teams.map(
+          (team) => host.state.room.players.filter((player) => player.teamId === team.id).length
+        );
+        return counts.every((count) => count >= 2);
+      },
+      'balanced teams after rebalance'
+    );
+  });
+
   it('completes a DrawNGuess chain over websockets', async () => {
     harnesses = await Promise.all(Array.from({ length: 4 }, () => connectHarness(baseUrl)));
     const [host, ...guests] = harnesses;

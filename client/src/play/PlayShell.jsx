@@ -32,7 +32,6 @@ export function PlayShell() {
           <div className="topbar__meta">
             <SoundToggle compact />
             <span className="topbar__pill">{game.name}</span>
-            <span className="topbar__pill topbar__pill--muted">Online flow</span>
           </div>
         </header>
         <Outlet />

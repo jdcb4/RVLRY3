@@ -1,12 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useAudioCues } from '../audio/AudioCueContext';
+import { ArrowLeftIcon, ShareIcon } from '../components/Icons';
 import { getGameModule } from '../games/registry';
 import { buildInviteLink, getStartHint } from './lobby/helpers';
-import {
-  ArrowLeftIcon,
-  ShareIcon
-} from './lobby/common';
 import { LOBBY_COMPONENTS } from './lobby';
 import { StandardLobby } from './lobby/StandardLobby';
 import { usePlaySession } from './PlaySessionContext';
@@ -28,6 +25,7 @@ export function GameLobbyScreen() {
     ensureRoom,
     assignTeam,
     updateTeamName,
+    rebalanceTeams,
     updateRoomSettings,
     submitHatClues,
     setReady,
@@ -194,9 +192,8 @@ export function GameLobbyScreen() {
     <main className="scene scene--lobby">
       <header className="scene__header scene__header--compact scene__header--with-back">
         <div className="scene__header-row">
-          <Link className="scene__back" to={`/play/${game.id}`}>
+          <Link aria-label="Back to game setup" className="scene__back scene__back--icon" to={`/play/${game.id}`}>
             <ArrowLeftIcon />
-            <span>Back</span>
           </Link>
         </div>
         <h1 className="scene__title scene__title--lobby">LOBBY</h1>
@@ -251,6 +248,7 @@ export function GameLobbyScreen() {
           updateSetting={handleUpdateSetting}
           updateTeamName={updateTeamName}
           assignTeam={assignTeam}
+          rebalanceTeams={rebalanceTeams}
           lobbyPrivateState={lobbyPrivateState}
           submitHatClues={handleSubmitHatClues}
           setError={setError}
@@ -264,11 +262,11 @@ export function GameLobbyScreen() {
       <div className="action-bar action-bar--actions-only">
         <div className="action-bar__actions">
           <button disabled={!currentPlayer || pendingAction === 'ready'} onClick={handleReadyToggle}>
-            {currentPlayer?.ready ? 'Not ready' : 'Ready'}
+            {currentPlayer?.ready ? 'Unready' : 'Ready'}
           </button>
           {isHost && (
             <button disabled={pendingAction === 'start' || Boolean(startHint)} onClick={handleStartGame}>
-              Start game
+              Start
             </button>
           )}
         </div>

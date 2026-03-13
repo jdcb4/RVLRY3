@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useAudioCues } from '../audio/AudioCueContext';
 import { SoundToggle } from '../audio/SoundToggle';
 import { SummaryChips } from '../components/gameplay/SharedGameUi';
+import { ArrowLeftIcon } from '../components/Icons';
 import { getGameById } from '../games/config';
 import {
   fetchHatGameSuggestions,
@@ -54,6 +55,9 @@ export function LocalMode() {
   const [session, setSession] = useState(null);
   const [busyAction, setBusyAction] = useState('');
   const [error, setError] = useState('');
+  const [playersPanelOpen, setPlayersPanelOpen] = useState(true);
+  const [optionsPanelOpen, setOptionsPanelOpen] = useState(false);
+  const [cluesPanelOpen, setCluesPanelOpen] = useState(gameId === 'hatgame');
 
   useEffect(() => {
     const nextSettings = getInitialSettingsForGame(gameId);
@@ -71,6 +75,9 @@ export function LocalMode() {
     setSession(null);
     setBusyAction('');
     setError('');
+    setPlayersPanelOpen(true);
+    setOptionsPanelOpen(false);
+    setCluesPanelOpen(gameId === 'hatgame');
   }, [gameId]);
 
   useEffect(() => {
@@ -107,6 +114,14 @@ export function LocalMode() {
   const SettingsCard = LOCAL_SETTINGS_COMPONENTS[gameModule.localSettingsVariant] ?? null;
   const ActiveLocalView =
     LOCAL_VIEW_COMPONENTS[gameModule.localVariant] ?? LOCAL_VIEW_COMPONENTS.imposter;
+  const readyCluePacks = useMemo(
+    () =>
+      Object.values(hatClueSubmissions).filter(
+        (submission) =>
+          submission?.clues?.every((clue) => clue.trim().length > 0)
+      ).length,
+    [hatClueSubmissions]
+  );
 
   const replacePlayers = useCallback((updater) => {
     setPlayers((currentPlayers) =>
@@ -348,12 +363,15 @@ export function LocalMode() {
   return (
     <main className="scene scene--local">
       <header className="scene__header scene__header--compact">
+        <div className="scene__header-row scene__header-row--between">
+          <Link aria-label="Back to RVLRY hub" className="scene__back scene__back--icon" to="/">
+            <ArrowLeftIcon />
+          </Link>
+          <SoundToggle compact />
+        </div>
         <p className="scene__eyebrow">Pass and play</p>
         <h1 className="scene__title">{game.name}</h1>
         <p className="scene__lead">{gameModule.localLead}</p>
-        <div className="actions">
-          <SoundToggle />
-        </div>
       </header>
 
       {!session ? (
@@ -361,7 +379,7 @@ export function LocalMode() {
           <section className="panel panel--hero panel--stacked">
             <div className="panel-heading">
               <h2>Setup</h2>
-              <p>Set the table, then pass the phone.</p>
+              <p>Name the table, set teams if needed, then start.</p>
             </div>
 
             <SummaryChips
@@ -375,20 +393,38 @@ export function LocalMode() {
             />
 
             {SettingsCard ? (
-              <SettingsCard settings={settings} onChange={handleUpdateTeamSetting} />
+              <details
+                className="panel disclosure setup-disclosure"
+                open={optionsPanelOpen}
+                onToggle={(event) => setOptionsPanelOpen(event.currentTarget.open)}
+              >
+                <summary className="disclosure__summary">
+                  <div className="disclosure__summary-copy">
+                    <h2>Options</h2>
+                    <p>
+                      {gameId === 'hatgame'
+                        ? `${settings.turnDurationSeconds}s turns, ${settings.cluesPerPlayer} clues each`
+                        : `${settings.turnDurationSeconds}s turns${
+                            settings.totalRounds ? `, ${settings.totalRounds} rounds` : ''
+                          }`}
+                    </p>
+                  </div>
+                </summary>
+                <div className="disclosure__body">
+                  <SettingsCard
+                    settings={settings}
+                    onChange={handleUpdateTeamSetting}
+                    showHeading={false}
+                  />
+                </div>
+              </details>
             ) : null}
 
             {error && <p className="connection-banner connection-banner--error">{error}</p>}
 
             <div className="actions actions--stretch">
-              <button
-                disabled={busyAction === 'start-session' || Boolean(startHint)}
-                onClick={startSession}
-              >
+              <button disabled={busyAction === 'start-session' || Boolean(startHint)} onClick={startSession}>
                 {busyAction === 'start-session' ? 'Preparing round' : 'Start local round'}
-              </button>
-              <button className="secondary-action" onClick={() => navigate(`/play/${game.id}`)}>
-                Back to online flow
               </button>
             </div>
             <p className="helper-text">
@@ -399,29 +435,64 @@ export function LocalMode() {
             </p>
           </section>
 
-          <LocalPlayersEditor
-            players={players}
-            teams={teams}
-            onRenamePlayer={handleRenamePlayer}
-            onTeamChange={handleChangeTeam}
-            onAddPlayer={handleAddPlayer}
-            onRemovePlayer={handleRemovePlayer}
-            onAutoBalance={() =>
-              setPlayers((currentPlayers) =>
-                rebalanceWhoWhatWherePlayers(currentPlayers, settings.teamCount)
-              )
-            }
-          />
+          <details
+            className="panel disclosure setup-disclosure"
+            open={playersPanelOpen}
+            onToggle={(event) => setPlayersPanelOpen(event.currentTarget.open)}
+          >
+            <summary className="disclosure__summary">
+              <div className="disclosure__summary-copy">
+                <h2>Players</h2>
+                <p>
+                  {players.length} player{players.length === 1 ? '' : 's'}
+                  {gameModule.requiresTeams ? `, ${settings.teamCount} teams` : ''}
+                </p>
+              </div>
+            </summary>
+            <div className="disclosure__body">
+              <LocalPlayersEditor
+                players={players}
+                teams={teams}
+                onRenamePlayer={handleRenamePlayer}
+                onTeamChange={handleChangeTeam}
+                onAddPlayer={handleAddPlayer}
+                onRemovePlayer={handleRemovePlayer}
+                onAutoBalance={() =>
+                  setPlayers((currentPlayers) =>
+                    rebalanceWhoWhatWherePlayers(currentPlayers, settings.teamCount)
+                  )
+                }
+                showHeading={false}
+              />
+            </div>
+          </details>
 
           {gameModule.requiresHatClues && (
-            <LocalHatGameClueEditor
-              players={players}
-              clueSubmissions={hatClueSubmissions}
-              cluesPerPlayer={settings.cluesPerPlayer}
-              busyAction={busyAction}
-              onChangeClue={handleChangeHatGameClue}
-              onGenerateClues={handleGenerateHatGameClues}
-            />
+            <details
+              className="panel disclosure setup-disclosure"
+              open={cluesPanelOpen}
+              onToggle={(event) => setCluesPanelOpen(event.currentTarget.open)}
+            >
+              <summary className="disclosure__summary">
+                <div className="disclosure__summary-copy">
+                  <h2>Clue packs</h2>
+                  <p>
+                    {readyCluePacks} / {players.length} ready
+                  </p>
+                </div>
+              </summary>
+              <div className="disclosure__body">
+                <LocalHatGameClueEditor
+                  players={players}
+                  clueSubmissions={hatClueSubmissions}
+                  cluesPerPlayer={settings.cluesPerPlayer}
+                  busyAction={busyAction}
+                  onChangeClue={handleChangeHatGameClue}
+                  onGenerateClues={handleGenerateHatGameClues}
+                  showHeading={false}
+                />
+              </div>
+            </details>
           )}
         </div>
       ) : (

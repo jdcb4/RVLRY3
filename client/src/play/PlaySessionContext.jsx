@@ -376,6 +376,16 @@ export function PlaySessionProvider({ children, game }) {
     [runRoomAction]
   );
 
+  const rebalanceTeams = useCallback(
+    async (code) => {
+      const normalizedCode = normalizeCode(code);
+      return runRoomAction('rebalance-teams', 'room:rebalance-teams', {
+        code: normalizedCode
+      });
+    },
+    [runRoomAction]
+  );
+
   const updateRoomSettings = useCallback(
     async (code, settings) => {
       const normalizedCode = normalizeCode(code);
@@ -447,6 +457,7 @@ export function PlaySessionProvider({ children, game }) {
       ensureRoom,
       assignTeam,
       updateTeamName,
+      rebalanceTeams,
       updateRoomSettings,
       submitHatClues,
       setReady,
@@ -469,6 +480,7 @@ export function PlaySessionProvider({ children, game }) {
       playerId,
       playerName,
       privateState,
+      rebalanceTeams,
       returnRoomToLobby,
       roomState,
       sendGameAction,

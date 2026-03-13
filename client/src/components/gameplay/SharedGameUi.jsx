@@ -18,33 +18,43 @@ export function TeamScoreboard({
   description = null,
   teams,
   activeTeamId = null,
-  children = null
+  children = null,
+  defaultOpen = false,
+  summary = null
 }) {
+  const activeTeam = teams.find((team) => team.id === activeTeamId);
+  const summaryLabel =
+    summary ?? (activeTeam ? `${activeTeam.name} up` : `${teams.length} teams`);
+
   return (
-    <section className="panel panel--stacked">
-      <div className="panel-heading">
-        <h2>{title}</h2>
-        {description ? <p>{description}</p> : null}
-      </div>
-
-      <ul className="player-list">
-        {teams.map((team) => (
-          <li key={team.id} className="player-row player-row--compact">
-            <div className="player-row__identity">
-              <span className="player-row__name">{team.name}</span>
-              <span className="helper-text">
-                {team.players.map((player) => player.name).join(', ') || 'No players'}
+    <details className="panel disclosure" open={defaultOpen}>
+      <summary className="disclosure__summary">
+        <div className="disclosure__summary-copy">
+          <h2>{title}</h2>
+          {description ? <p>{description}</p> : null}
+        </div>
+        {summaryLabel ? <span className="badge">{summaryLabel}</span> : null}
+      </summary>
+      <div className="disclosure__body field-stack">
+        <ul className="player-list">
+          {teams.map((team) => (
+            <li key={team.id} className="player-row player-row--compact">
+              <div className="player-row__identity">
+                <span className="player-row__name">{team.name}</span>
+                <span className="helper-text">
+                  {team.players.map((player) => player.name).join(', ') || 'No players'}
+                </span>
+              </div>
+              <span className={team.id === activeTeamId ? 'badge badge--ready' : 'badge'}>
+                {team.score} pts
               </span>
-            </div>
-            <span className={team.id === activeTeamId ? 'badge badge--ready' : 'badge'}>
-              {team.score} pts
-            </span>
-          </li>
-        ))}
-      </ul>
+            </li>
+          ))}
+        </ul>
 
-      {children}
-    </section>
+        {children}
+      </div>
+    </details>
   );
 }
 

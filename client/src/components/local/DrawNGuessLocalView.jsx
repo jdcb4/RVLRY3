@@ -35,6 +35,7 @@ export function DrawNGuessLocalView({
         <HandoffPanel
           pill={isDrawStage ? 'Draw step' : 'Guess step'}
           title={`Pass to ${activePlayer.name}`}
+          targetName={activePlayer.name}
           description={
             isDrawStage
               ? 'Only this player should see the prompt before they sketch it.'
