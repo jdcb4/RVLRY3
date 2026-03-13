@@ -4,6 +4,7 @@ import { SoundToggle } from '../audio/SoundToggle';
 import { useAudioCues } from '../audio/AudioCueContext';
 import { useStageCue, useTimedTurnAudio } from '../audio/useGameAudio';
 import { getGameById } from '../games/config';
+import { getGameModule } from '../games/registry';
 import {
   applyLocalAction,
   buildLocalSession,
@@ -26,17 +27,6 @@ import {
 
 const LOCAL_PLAYER_LIMIT = 8;
 const EMPTY_TEAMS = [];
-
-const localInstructions = {
-  imposter:
-    'Set the room on one device, reveal each secret role privately, then pass the phone for clues and votes.',
-  whowhatwhere:
-    'Build the teams on one screen, hand the phone to the describer, and run the timer locally.',
-  drawnguess:
-    'Pass the device from player to player, alternating hidden drawings and guesses until the chain is revealed.',
-  hatgame:
-    'Build teams, let each player add person-name clues, then reuse the same clue pool across describe, one-word, and charades phases.'
-};
 
 const createLocalPlayerId = () =>
   window.crypto?.randomUUID?.() ?? `local-${Math.random().toString(36).slice(2, 10)}`;
@@ -301,7 +291,7 @@ function LocalPlayersEditor({
     <section className="panel panel--stacked">
       <div className="panel-heading">
         <h2>Players</h2>
-        <p>Name everyone here first so the handoff prompts and scoreboards stay clear.</p>
+        <p>Name everyone first so handoffs stay clear.</p>
       </div>
 
       <div className="local-toolbar">
@@ -362,7 +352,7 @@ function LocalHatGameClueEditor({
     <section className="panel panel--stacked">
       <div className="panel-heading">
         <h2>Clue packs</h2>
-        <p>Each player adds person names here. Use the Who list button for a quick editable draft.</p>
+        <p>Add person names here. The Who list button gives each player an editable draft.</p>
       </div>
 
       <div className="local-player-grid">
@@ -479,7 +469,7 @@ function LocalImposterView({
           <div className="panel-heading">
             <p className="status-pill">Clue round</p>
             <h2>{activePlayer.name} is up</h2>
-            <p>Speak the clue out loud, then capture it here so the room can review the round later.</p>
+            <p>Say the clue, then log it here.</p>
           </div>
 
           <SummaryChips
@@ -1202,11 +1192,142 @@ function LocalHatGameView({
   );
 }
 
+function WhoWhatWhereSettingsCard({ settings, onChange }) {
+  return (
+    <section className="settings-card">
+      <div className="panel-heading">
+        <h3>Match settings</h3>
+      </div>
+
+      <div className="settings-grid">
+        <label className="settings-field">
+          <span className="helper-text">Teams</span>
+          <select value={settings.teamCount} onChange={(event) => onChange('teamCount', Number.parseInt(event.target.value, 10))}>
+            <option value={2}>2 teams</option>
+            <option value={3}>3 teams</option>
+            <option value={4}>4 teams</option>
+          </select>
+        </label>
+
+        <label className="settings-field">
+          <span className="helper-text">Turn length</span>
+          <select value={settings.turnDurationSeconds} onChange={(event) => onChange('turnDurationSeconds', Number.parseInt(event.target.value, 10))}>
+            <option value={30}>30 seconds</option>
+            <option value={45}>45 seconds</option>
+            <option value={60}>60 seconds</option>
+            <option value={75}>75 seconds</option>
+          </select>
+        </label>
+
+        <label className="settings-field">
+          <span className="helper-text">Rounds</span>
+          <select value={settings.totalRounds} onChange={(event) => onChange('totalRounds', Number.parseInt(event.target.value, 10))}>
+            <option value={1}>1 round</option>
+            <option value={2}>2 rounds</option>
+            <option value={3}>3 rounds</option>
+            <option value={4}>4 rounds</option>
+          </select>
+        </label>
+
+        <label className="settings-field">
+          <span className="helper-text">Free skips</span>
+          <select value={settings.freeSkips} onChange={(event) => onChange('freeSkips', Number.parseInt(event.target.value, 10))}>
+            <option value={0}>0</option>
+            <option value={1}>1</option>
+            <option value={2}>2</option>
+            <option value={3}>3</option>
+          </select>
+        </label>
+
+        <label className="settings-field">
+          <span className="helper-text">Skip penalty</span>
+          <select value={settings.skipPenalty} onChange={(event) => onChange('skipPenalty', Number.parseInt(event.target.value, 10))}>
+            <option value={0}>0 points</option>
+            <option value={1}>1 point</option>
+            <option value={2}>2 points</option>
+          </select>
+        </label>
+      </div>
+    </section>
+  );
+}
+
+function HatGameSettingsCard({ settings, onChange }) {
+  return (
+    <section className="settings-card">
+      <div className="panel-heading">
+        <h3>Round settings</h3>
+      </div>
+
+      <div className="settings-grid">
+        <label className="settings-field">
+          <span className="helper-text">Teams</span>
+          <select value={settings.teamCount} onChange={(event) => onChange('teamCount', Number.parseInt(event.target.value, 10))}>
+            <option value={2}>2 teams</option>
+            <option value={3}>3 teams</option>
+            <option value={4}>4 teams</option>
+          </select>
+        </label>
+
+        <label className="settings-field">
+          <span className="helper-text">Turn length</span>
+          <select value={settings.turnDurationSeconds} onChange={(event) => onChange('turnDurationSeconds', Number.parseInt(event.target.value, 10))}>
+            <option value={30}>30 seconds</option>
+            <option value={45}>45 seconds</option>
+            <option value={60}>60 seconds</option>
+            <option value={90}>90 seconds</option>
+            <option value={120}>120 seconds</option>
+          </select>
+        </label>
+
+        <label className="settings-field">
+          <span className="helper-text">Clues each</span>
+          <select value={settings.cluesPerPlayer} onChange={(event) => onChange('cluesPerPlayer', Number.parseInt(event.target.value, 10))}>
+            <option value={3}>3 clues</option>
+            <option value={4}>4 clues</option>
+            <option value={5}>5 clues</option>
+            <option value={6}>6 clues</option>
+            <option value={7}>7 clues</option>
+            <option value={8}>8 clues</option>
+            <option value={9}>9 clues</option>
+            <option value={10}>10 clues</option>
+          </select>
+        </label>
+
+        <label className="settings-field">
+          <span className="helper-text">Skips per turn</span>
+          <select value={settings.skipsPerTurn} onChange={(event) => onChange('skipsPerTurn', Number.parseInt(event.target.value, 10))}>
+            <option value={0}>0 skips</option>
+            <option value={1}>1 skip</option>
+            <option value={2}>2 skips</option>
+            <option value={3}>3 skips</option>
+            <option value={4}>4 skips</option>
+            <option value={5}>5 skips</option>
+          </select>
+        </label>
+      </div>
+    </section>
+  );
+}
+
+const LOCAL_VIEW_COMPONENTS = {
+  imposter: LocalImposterView,
+  whowhatwhere: LocalWhoWhatWhereView,
+  drawnguess: LocalDrawNGuessView,
+  hatgame: LocalHatGameView
+};
+
+const LOCAL_SETTINGS_COMPONENTS = {
+  whowhatwhere: WhoWhatWhereSettingsCard,
+  hatgame: HatGameSettingsCard
+};
+
 export function LocalMode() {
   const { gameId } = useParams();
   const navigate = useNavigate();
   const { playCue } = useAudioCues();
   const game = getGameById(gameId);
+  const gameModule = getGameModule(gameId);
   const [settings, setSettings] = useState(() => getInitialSettingsForGame(gameId));
   const [players, setPlayers] = useState(() =>
     getInitialPlayers(gameId, getInitialSettingsForGame(gameId))
@@ -1256,14 +1377,11 @@ export function LocalMode() {
   }, [gameId, players, settings.cluesPerPlayer]);
 
   const teams = useMemo(
-    () =>
-      gameId === 'whowhatwhere' || gameId === 'hatgame'
-        ? buildLocalTeams(settings.teamCount)
-        : EMPTY_TEAMS,
-    [gameId, settings.teamCount]
+    () => (gameModule.requiresTeams ? buildLocalTeams(settings.teamCount) : EMPTY_TEAMS),
+    [gameModule.requiresTeams, settings.teamCount]
   );
 
-  const startWarning = useMemo(
+  const startHint = useMemo(
     () =>
       getLocalStartError({
         gameId,
@@ -1273,6 +1391,8 @@ export function LocalMode() {
       }),
     [gameId, hatClueSubmissions, players, settings]
   );
+  const SettingsCard = LOCAL_SETTINGS_COMPONENTS[gameModule.localSettingsVariant] ?? null;
+  const ActiveLocalView = LOCAL_VIEW_COMPONENTS[gameModule.localVariant] ?? LocalImposterView;
 
   const replacePlayers = useCallback((updater) => {
     setPlayers((currentPlayers) =>
@@ -1301,8 +1421,8 @@ export function LocalMode() {
   }, []);
 
   const startSession = useCallback(async () => {
-    if (startWarning) {
-      setError(startWarning);
+    if (startHint) {
+      setError(startHint);
       return;
     }
 
@@ -1325,7 +1445,7 @@ export function LocalMode() {
     } finally {
       setBusyAction('');
     }
-  }, [gameId, hatClueSubmissions, players, settings, startWarning]);
+  }, [gameId, hatClueSubmissions, players, settings, startHint]);
 
   const playAgain = useCallback(async () => {
     setBusyAction('restart');
@@ -1428,7 +1548,7 @@ export function LocalMode() {
     };
     setSettings(nextSettings);
 
-    if (key === 'teamCount' && (gameId === 'whowhatwhere' || gameId === 'hatgame')) {
+    if (key === 'teamCount' && gameModule.requiresTeams) {
       setPlayers((currentPlayers) => rebalanceWhoWhatWherePlayers(currentPlayers, value));
     }
   };
@@ -1498,7 +1618,7 @@ export function LocalMode() {
       <header className="scene__header scene__header--compact">
         <p className="scene__eyebrow">Pass and play</p>
         <h1 className="scene__title">{game.name}</h1>
-        <p className="scene__lead">{localInstructions[game.id]}</p>
+        <p className="scene__lead">{gameModule.localLead}</p>
         <div className="actions">
           <SoundToggle />
         </div>
@@ -1509,153 +1629,34 @@ export function LocalMode() {
           <section className="panel panel--hero panel--stacked">
             <div className="panel-heading">
               <h2>Setup</h2>
-              <p>Configure the table once, then the phone becomes the handoff device for the whole round.</p>
+              <p>Set the table once, then pass the phone as needed.</p>
             </div>
 
             <SummaryChips
               items={[
                 { label: 'Players', value: players.length },
                 { label: 'Mode', value: 'Single device' },
-                game.id === 'whowhatwhere' || game.id === 'hatgame'
+                gameModule.requiresTeams
                   ? { label: 'Teams', value: settings.teamCount }
                   : { label: 'Word type', value: getLocalWordType(game.id) }
               ]}
             />
 
-            {game.id === 'whowhatwhere' && (
-              <section className="settings-card">
-                <div className="panel-heading">
-                  <h3>Match settings</h3>
-                </div>
-
-                <div className="settings-grid">
-                  <label className="settings-field">
-                    <span className="helper-text">Teams</span>
-                    <select value={settings.teamCount} onChange={(event) => handleUpdateTeamSetting('teamCount', Number.parseInt(event.target.value, 10))}>
-                      <option value={2}>2 teams</option>
-                      <option value={3}>3 teams</option>
-                      <option value={4}>4 teams</option>
-                    </select>
-                  </label>
-
-                  <label className="settings-field">
-                    <span className="helper-text">Turn length</span>
-                    <select value={settings.turnDurationSeconds} onChange={(event) => handleUpdateTeamSetting('turnDurationSeconds', Number.parseInt(event.target.value, 10))}>
-                      <option value={30}>30 seconds</option>
-                      <option value={45}>45 seconds</option>
-                      <option value={60}>60 seconds</option>
-                      <option value={75}>75 seconds</option>
-                    </select>
-                  </label>
-
-                  <label className="settings-field">
-                    <span className="helper-text">Rounds</span>
-                    <select value={settings.totalRounds} onChange={(event) => handleUpdateTeamSetting('totalRounds', Number.parseInt(event.target.value, 10))}>
-                      <option value={1}>1 round</option>
-                      <option value={2}>2 rounds</option>
-                      <option value={3}>3 rounds</option>
-                      <option value={4}>4 rounds</option>
-                    </select>
-                  </label>
-
-                  <label className="settings-field">
-                    <span className="helper-text">Free skips</span>
-                    <select value={settings.freeSkips} onChange={(event) => handleUpdateTeamSetting('freeSkips', Number.parseInt(event.target.value, 10))}>
-                      <option value={0}>0</option>
-                      <option value={1}>1</option>
-                      <option value={2}>2</option>
-                      <option value={3}>3</option>
-                    </select>
-                  </label>
-
-                  <label className="settings-field">
-                    <span className="helper-text">Skip penalty</span>
-                    <select value={settings.skipPenalty} onChange={(event) => handleUpdateTeamSetting('skipPenalty', Number.parseInt(event.target.value, 10))}>
-                      <option value={0}>0 points</option>
-                      <option value={1}>1 point</option>
-                      <option value={2}>2 points</option>
-                    </select>
-                  </label>
-                </div>
-              </section>
-            )}
-
-            {game.id === 'hatgame' && (
-              <section className="settings-card">
-                <div className="panel-heading">
-                  <h3>Round settings</h3>
-                </div>
-
-                <div className="settings-grid">
-                  <label className="settings-field">
-                    <span className="helper-text">Teams</span>
-                    <select value={settings.teamCount} onChange={(event) => handleUpdateTeamSetting('teamCount', Number.parseInt(event.target.value, 10))}>
-                      <option value={2}>2 teams</option>
-                      <option value={3}>3 teams</option>
-                      <option value={4}>4 teams</option>
-                    </select>
-                  </label>
-
-                  <label className="settings-field">
-                    <span className="helper-text">Turn length</span>
-                    <select value={settings.turnDurationSeconds} onChange={(event) => handleUpdateTeamSetting('turnDurationSeconds', Number.parseInt(event.target.value, 10))}>
-                      <option value={30}>30 seconds</option>
-                      <option value={45}>45 seconds</option>
-                      <option value={60}>60 seconds</option>
-                      <option value={90}>90 seconds</option>
-                      <option value={120}>120 seconds</option>
-                    </select>
-                  </label>
-
-                  <label className="settings-field">
-                    <span className="helper-text">Clues each</span>
-                    <select value={settings.cluesPerPlayer} onChange={(event) => handleUpdateTeamSetting('cluesPerPlayer', Number.parseInt(event.target.value, 10))}>
-                      <option value={3}>3 clues</option>
-                      <option value={4}>4 clues</option>
-                      <option value={5}>5 clues</option>
-                      <option value={6}>6 clues</option>
-                      <option value={7}>7 clues</option>
-                      <option value={8}>8 clues</option>
-                      <option value={9}>9 clues</option>
-                      <option value={10}>10 clues</option>
-                    </select>
-                  </label>
-
-                  <label className="settings-field">
-                    <span className="helper-text">Skips per turn</span>
-                    <select value={settings.skipsPerTurn} onChange={(event) => handleUpdateTeamSetting('skipsPerTurn', Number.parseInt(event.target.value, 10))}>
-                      <option value={0}>0 skips</option>
-                      <option value={1}>1 skip</option>
-                      <option value={2}>2 skips</option>
-                      <option value={3}>3 skips</option>
-                      <option value={4}>4 skips</option>
-                      <option value={5}>5 skips</option>
-                    </select>
-                  </label>
-                </div>
-              </section>
-            )}
-
-            {startWarning ? (
-              <p className="connection-banner connection-banner--error">{startWarning}</p>
-            ) : (
-              <p className="connection-banner">
-                {game.id === 'hatgame'
-                  ? 'Ready to start once the names, teams, and clue packs look right.'
-                  : 'Ready to start once the names and teams look right.'}
-              </p>
-            )}
+            {SettingsCard ? <SettingsCard settings={settings} onChange={handleUpdateTeamSetting} /> : null}
 
             {error && <p className="connection-banner connection-banner--error">{error}</p>}
 
             <div className="actions actions--stretch">
-              <button disabled={busyAction === 'start-session'} onClick={startSession}>
+              <button disabled={busyAction === 'start-session' || Boolean(startHint)} onClick={startSession}>
                 {busyAction === 'start-session' ? 'Preparing round' : 'Start local round'}
               </button>
               <button className="secondary-action" onClick={() => navigate(`/play/${game.id}`)}>
                 Back to online flow
               </button>
             </div>
+            <p className="helper-text">
+              {startHint ?? (gameModule.requiresHatClues ? 'Ready once teams and clue packs are set.' : 'Ready once names and teams look right.')}
+            </p>
           </section>
 
           <LocalPlayersEditor
@@ -1668,7 +1669,7 @@ export function LocalMode() {
             onAutoBalance={() => setPlayers((currentPlayers) => rebalanceWhoWhatWherePlayers(currentPlayers, settings.teamCount))}
           />
 
-          {game.id === 'hatgame' && (
+          {gameModule.requiresHatClues && (
             <LocalHatGameClueEditor
               players={players}
               clueSubmissions={hatClueSubmissions}
@@ -1683,47 +1684,14 @@ export function LocalMode() {
         <>
           {error && <p className="connection-banner connection-banner--error">{error}</p>}
 
-          {game.id === 'imposter' && (
-            <LocalImposterView
-              session={session}
-              applyAction={applyAction}
-              busyAction={busyAction}
-              onPlayAgain={playAgain}
-              onResetSetup={handleResetSetup}
-            />
-          )}
-
-          {game.id === 'whowhatwhere' && (
-            <LocalWhoWhatWhereView
-              session={session}
-              applyAction={applyAction}
-              busyAction={busyAction}
-              onStartTurn={startTimedTeamTurn}
-              onPlayAgain={playAgain}
-              onResetSetup={handleResetSetup}
-            />
-          )}
-
-          {game.id === 'drawnguess' && (
-            <LocalDrawNGuessView
-              session={session}
-              applyAction={applyAction}
-              busyAction={busyAction}
-              onPlayAgain={playAgain}
-              onResetSetup={handleResetSetup}
-            />
-          )}
-
-          {game.id === 'hatgame' && (
-            <LocalHatGameView
-              session={session}
-              applyAction={applyAction}
-              busyAction={busyAction}
-              onStartTurn={startTimedTeamTurn}
-              onPlayAgain={playAgain}
-              onResetSetup={handleResetSetup}
-            />
-          )}
+          <ActiveLocalView
+            session={session}
+            applyAction={applyAction}
+            busyAction={busyAction}
+            onStartTurn={startTimedTeamTurn}
+            onPlayAgain={playAgain}
+            onResetSetup={handleResetSetup}
+          />
         </>
       )}
     </main>

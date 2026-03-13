@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useAudioCues } from '../audio/AudioCueContext';
 import { useStageCue, useTimedTurnAudio } from '../audio/useGameAudio';
 import { useNavigate, useParams } from 'react-router-dom';
+import { getGameModule } from '../games/registry';
 import { usePlaySession } from './PlaySessionContext';
 
 const EMPTY_TEAMS = [];
@@ -134,7 +135,7 @@ function ImposterPlay({
         <div className="panel-heading">
           <p className="status-pill">{stage === 'clues' ? 'Clue round' : stage === 'voting' ? 'Voting' : 'Results'}</p>
           <h2>Your role</h2>
-          <p>Keep the live action at the top. Secondary detail stays tucked below.</p>
+          <p>Focus on the current move first.</p>
         </div>
 
         <SummaryChips
@@ -256,7 +257,7 @@ function ImposterPlay({
         )}
       </DisclosurePanel>
 
-      <DisclosurePanel title="Players" description="Host, turn order, and active status in one place." summary={`${roomState.players.length} connected`}>
+      <DisclosurePanel title="Players" description="See who is up next." summary={`${roomState.players.length} connected`}>
         <GameplayPlayerList
           players={roomState.players}
           playerId={playerId}
@@ -1125,7 +1126,7 @@ function DrawNGuessPlay({
                   ? 'Chain complete'
                   : 'Waiting'}
           </h2>
-          <p>Put the current task first and keep the reveal chain below the fold until it matters.</p>
+          <p>Focus on the active step first.</p>
         </div>
 
         <SummaryChips
@@ -1185,7 +1186,7 @@ function DrawNGuessPlay({
 
       <DisclosurePanel
         title="Reveal chain"
-        description="Collapsed during play so the current action stays visible first on mobile."
+        description="Opened at the end so the active step stays clear."
         summary={results ? `${results.chain.length} entries` : 'Pending'}
         defaultOpen={stage === 'results'}
       >
@@ -1227,6 +1228,13 @@ function DrawNGuessPlay({
   );
 }
 
+const GAMEPLAY_COMPONENTS = {
+  imposter: ImposterPlay,
+  whowhatwhere: WhoWhatWherePlay,
+  drawnguess: DrawNGuessPlay,
+  hatgame: HatGamePlay
+};
+
 export function GamePlayScreen() {
   const navigate = useNavigate();
   const { roomCode } = useParams();
@@ -1241,6 +1249,7 @@ export function GamePlayScreen() {
     returnRoomToLobby,
     pendingAction
   } = usePlaySession();
+  const gameModule = getGameModule(game.id);
 
   useEffect(() => {
     let ignore = false;
@@ -1280,19 +1289,15 @@ export function GamePlayScreen() {
     [roomState?.players]
   );
   const isHost = roomState?.hostId === playerId;
-  const gameplayLead =
-    game.gameplayView === 'whowhatwhere'
-      ? 'Each turn is split into setup, live play, and between-turn recap so phones stay focused.'
-      : game.gameplayView === 'hatgame'
-        ? 'Three phases share the same clue pool, so the screen keeps phase rules and the live clue front and center.'
-      : 'The primary move stays above the fold. Logs, rosters, and reveal data are still there, just no longer competing for attention.';
+  const gameplayLead = gameModule.gameplayLead;
+  const ActiveGameplay = GAMEPLAY_COMPONENTS[gameModule.playVariant] ?? ImposterPlay;
 
   if (!roomState || roomState.code !== roomCode || roomState.phase !== 'in-progress') {
     return (
       <main className="scene scene--simple">
         <p className="scene__eyebrow">Gameplay</p>
         <h1 className="scene__title">{game.name}</h1>
-        <p className="scene__lead">Restoring the active round and your private game state.</p>
+        <p className="scene__lead">Restoring the round and your private state.</p>
       </main>
     );
   }
@@ -1305,60 +1310,17 @@ export function GamePlayScreen() {
         <p className="scene__lead">{gameplayLead}</p>
       </header>
 
-      {game.gameplayView === 'imposter' && (
-        <ImposterPlay
-          roomCode={roomCode}
-          roomState={roomState}
-          privateState={privateState}
-          playersById={playersById}
-          playerId={playerId}
-          isHost={isHost}
-          pendingAction={pendingAction}
-          sendGameAction={sendGameAction}
-          returnRoomToLobby={returnRoomToLobby}
-        />
-      )}
-
-      {game.gameplayView === 'whowhatwhere' && (
-        <WhoWhatWherePlay
-          roomCode={roomCode}
-          roomState={roomState}
-          privateState={privateState}
-          playersById={playersById}
-          playerId={playerId}
-          isHost={isHost}
-          pendingAction={pendingAction}
-          sendGameAction={sendGameAction}
-          returnRoomToLobby={returnRoomToLobby}
-        />
-      )}
-
-      {game.gameplayView === 'drawnguess' && (
-        <DrawNGuessPlay
-          roomCode={roomCode}
-          roomState={roomState}
-          privateState={privateState}
-          playersById={playersById}
-          playerId={playerId}
-          isHost={isHost}
-          pendingAction={pendingAction}
-          sendGameAction={sendGameAction}
-          returnRoomToLobby={returnRoomToLobby}
-        />
-      )}
-
-      {game.gameplayView === 'hatgame' && (
-        <HatGamePlay
-          roomCode={roomCode}
-          roomState={roomState}
-          privateState={privateState}
-          playerId={playerId}
-          isHost={isHost}
-          pendingAction={pendingAction}
-          sendGameAction={sendGameAction}
-          returnRoomToLobby={returnRoomToLobby}
-        />
-      )}
+      <ActiveGameplay
+        roomCode={roomCode}
+        roomState={roomState}
+        privateState={privateState}
+        playersById={playersById}
+        playerId={playerId}
+        isHost={isHost}
+        pendingAction={pendingAction}
+        sendGameAction={sendGameAction}
+        returnRoomToLobby={returnRoomToLobby}
+      />
     </main>
   );
 }

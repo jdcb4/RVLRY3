@@ -1,10 +1,22 @@
+import { lazy, Suspense } from 'react';
 import { Link, Route, Routes } from 'react-router-dom';
-import { LocalMode } from './components/LocalMode';
 import { games } from './games/config';
-import { GameLanding } from './play/GameLanding';
-import { GameLobbyScreen } from './play/GameLobbyScreen';
-import { GamePlayScreen } from './play/GamePlayScreen';
-import { PlayShell } from './play/PlayShell';
+
+const LocalMode = lazy(() =>
+  import('./components/LocalMode').then((module) => ({ default: module.LocalMode }))
+);
+const GameLanding = lazy(() =>
+  import('./play/GameLanding').then((module) => ({ default: module.GameLanding }))
+);
+const GameLobbyScreen = lazy(() =>
+  import('./play/GameLobbyScreen').then((module) => ({ default: module.GameLobbyScreen }))
+);
+const GamePlayScreen = lazy(() =>
+  import('./play/GamePlayScreen').then((module) => ({ default: module.GamePlayScreen }))
+);
+const PlayShell = lazy(() =>
+  import('./play/PlayShell').then((module) => ({ default: module.PlayShell }))
+);
 
 function Home() {
   return (
@@ -45,17 +57,28 @@ function Home() {
   );
 }
 
+function RouteFallback() {
+  return (
+    <main className="scene scene--simple">
+      <p className="scene__eyebrow">RVLRY</p>
+      <h1 className="scene__title">Loading</h1>
+    </main>
+  );
+}
+
+const withSuspense = (element) => <Suspense fallback={<RouteFallback />}>{element}</Suspense>;
+
 export default function App() {
   return (
     <Routes>
       <Route path="/" element={<Home />} />
-      <Route path="/play/:gameId" element={<PlayShell />}>
-        <Route index element={<GameLanding />} />
-        <Route path="join/:roomCode" element={<GameLanding />} />
-        <Route path="lobby/:roomCode" element={<GameLobbyScreen />} />
-        <Route path="game/:roomCode" element={<GamePlayScreen />} />
+      <Route path="/play/:gameId" element={withSuspense(<PlayShell />)}>
+        <Route index element={withSuspense(<GameLanding />)} />
+        <Route path="join/:roomCode" element={withSuspense(<GameLanding />)} />
+        <Route path="lobby/:roomCode" element={withSuspense(<GameLobbyScreen />)} />
+        <Route path="game/:roomCode" element={withSuspense(<GamePlayScreen />)} />
       </Route>
-      <Route path="/local/:gameId" element={<LocalMode />} />
+      <Route path="/local/:gameId" element={withSuspense(<LocalMode />)} />
     </Routes>
   );
 }

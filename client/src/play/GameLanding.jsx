@@ -67,19 +67,13 @@ export function GameLanding() {
               {connectionState === 'connected' ? 'Server live' : 'Connecting'}
             </p>
             <h2>{inviteRoomCode ? `Join room ${inviteRoomCode}` : 'Play online'}</h2>
-            <p>
-              Keep setup short on mobile: save your name once, then create a room or drop in with a
-              six-character code.
-            </p>
+            <p>Save your name, then create or join with a code.</p>
           </div>
 
           {currentRoomTarget && (
             <div className="notice-card">
               <strong>Current session found</strong>
-              <p>
-                You already have an active {roomState.phase === 'in-progress' ? 'game' : 'lobby'} for{' '}
-                {roomState.code} on this device.
-              </p>
+              <p>{roomState.phase === 'in-progress' ? 'Game' : 'Lobby'} {roomState.code} is already on this device.</p>
               <div className="actions">
                 <Link className="button-link button-link--secondary" to={currentRoomTarget}>
                   Return to {roomState.code}
@@ -91,7 +85,7 @@ export function GameLanding() {
           {!currentRoomTarget && lastRoomCode && (
             <div className="notice-card">
               <strong>Quick rejoin</strong>
-              <p>Jump back into your last {game.name} room without typing the code again.</p>
+              <p>Jump back into your last room without typing the code again.</p>
               <div className="actions">
                 <button className="secondary-action" onClick={() => handleJoinRoom(lastRoomCode)}>
                   Rejoin {lastRoomCode}
@@ -138,16 +132,12 @@ export function GameLanding() {
             </button>
           </div>
 
-          <p className="helper-text">
-            Your name stays saved on this device. Room codes are uppercase and can be shared by link
-            from the lobby.
-          </p>
+          <p className="helper-text">Your name stays on this device. Share the code or lobby link after you join.</p>
         </section>
 
         <section className="panel panel--stacked">
           <div className="panel-heading">
-            <h2>How this feels in play</h2>
-            <p>The setup flow is now split into landing, lobby, and gameplay so the live round stays uncluttered.</p>
+            <h2>How to play</h2>
           </div>
 
           <ol className="step-list">

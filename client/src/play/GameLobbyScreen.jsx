@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useAudioCues } from '../audio/AudioCueContext';
+import { getGameModule } from '../games/registry';
 import { usePlaySession } from './PlaySessionContext';
 
 const buildInviteLink = (gameId, roomCode) => `${window.location.origin}/play/${gameId}/join/${roomCode}`;
@@ -145,8 +146,7 @@ function WhoWhatWhereLobby({
   updateSetting,
   updateTeamName,
   assignTeam,
-  error,
-  startWarning
+  error
 }) {
   const teamRosters = useMemo(() => buildTeamRosters(roomState), [roomState]);
 
@@ -157,7 +157,6 @@ function WhoWhatWhereLobby({
       </div>
 
       {error && <p className="connection-banner connection-banner--error">{error}</p>}
-      {startWarning && <p className="connection-banner connection-banner--error">{startWarning}</p>}
 
       <div className="team-grid">
         {teamRosters.map((team) => (
@@ -271,7 +270,6 @@ function HatGameLobby({
   submitHatClues,
   setError,
   error,
-  startWarning,
   onToast,
   onPlaySubmitCue
 }) {
@@ -357,7 +355,6 @@ function HatGameLobby({
       </div>
 
       {error && <p className="connection-banner connection-banner--error">{error}</p>}
-      {startWarning && <p className="connection-banner connection-banner--error">{startWarning}</p>}
 
       <div className="team-grid">
         {teamRosters.map((team) => (
@@ -455,7 +452,7 @@ function HatGameLobby({
       <section className="settings-card">
         <div className="panel-heading">
           <h3>Your clue pack</h3>
-          <p>Use person names only. Real or fictional both work.</p>
+          <p>Use person names only.</p>
         </div>
 
         <div className="field-stack">
@@ -524,7 +521,7 @@ function HatGameLobby({
   );
 }
 
-function StandardLobby({ roomState, playerId, error, startWarning }) {
+function StandardLobby({ roomState, playerId, error }) {
   return (
     <section className="panel panel--stacked">
       <div className="panel-heading">
@@ -532,7 +529,6 @@ function StandardLobby({ roomState, playerId, error, startWarning }) {
       </div>
 
       {error && <p className="connection-banner connection-banner--error">{error}</p>}
-      {startWarning && <p className="connection-banner connection-banner--error">{startWarning}</p>}
 
       <ul className="player-list">
         {roomState.players.map((player) => (
@@ -554,7 +550,7 @@ function StandardLobby({ roomState, playerId, error, startWarning }) {
   );
 }
 
-const getStartWarning = ({ roomState, game, isHost, allPlayersReady }) => {
+const getStartHint = ({ roomState, game, gameModule, isHost, allPlayersReady }) => {
   if (!roomState) {
     return 'Lobby is still loading';
   }
@@ -563,7 +559,7 @@ const getStartWarning = ({ roomState, game, isHost, allPlayersReady }) => {
     return 'Only the host can start the game';
   }
 
-  if (game.gameplayView === 'whowhatwhere' || game.gameplayView === 'hatgame') {
+  if (gameModule.requiresTeams) {
     const teamCount = roomState.settings?.teamCount ?? 2;
     const requiredPlayers = Math.max(game.minPlayers, teamCount * 2);
 
@@ -581,7 +577,7 @@ const getStartWarning = ({ roomState, game, isHost, allPlayersReady }) => {
       return 'Each team needs at least 2 players';
     }
 
-    if (game.gameplayView === 'hatgame') {
+    if (gameModule.requiresHatClues) {
       const requiredClues =
         roomState.lobbyState?.requiredCluesPerPlayer ??
         roomState.settings?.cluesPerPlayer ??
@@ -603,6 +599,12 @@ const getStartWarning = ({ roomState, game, isHost, allPlayersReady }) => {
   }
 
   return null;
+};
+
+const LOBBY_COMPONENTS = {
+  standard: StandardLobby,
+  whowhatwhere: WhoWhatWhereLobby,
+  hatgame: HatGameLobby
 };
 
 export function GameLobbyScreen() {
@@ -627,6 +629,7 @@ export function GameLobbyScreen() {
     setReady,
     startGame
   } = usePlaySession();
+  const gameModule = getGameModule(game.id);
   const [toastMessage, setToastMessage] = useState('');
   const [teamNameDrafts, setTeamNameDrafts] = useState({});
   const [settingsForm, setSettingsForm] = useState({
@@ -696,10 +699,11 @@ export function GameLobbyScreen() {
   const isHost = roomState?.hostId === playerId;
   const allPlayersReady = roomState?.players.every((player) => player.ready) ?? false;
   const inviteLink = buildInviteLink(game.id, roomCode);
-  const startWarning = useMemo(
-    () => getStartWarning({ roomState, game, isHost, allPlayersReady }),
-    [allPlayersReady, game, isHost, roomState]
+  const startHint = useMemo(
+    () => getStartHint({ roomState, game, gameModule, isHost, allPlayersReady }),
+    [allPlayersReady, game, gameModule, isHost, roomState]
   );
+  const LobbyComponent = LOBBY_COMPONENTS[gameModule.lobbyVariant] ?? StandardLobby;
 
   useEffect(() => {
     if (!toastMessage) {
@@ -745,8 +749,8 @@ export function GameLobbyScreen() {
   };
 
   const handleStartGame = async () => {
-    if (startWarning) {
-      setToastMessage(startWarning);
+    if (startHint) {
+      setToastMessage(startHint);
       return;
     }
 
@@ -779,7 +783,7 @@ export function GameLobbyScreen() {
       <main className="scene scene--simple">
         <p className="scene__eyebrow">Lobby</p>
         <h1 className="scene__title">LOBBY</h1>
-        <p className="scene__lead">Reconnecting you to the room and restoring your place.</p>
+        <p className="scene__lead">Reconnecting you to the room.</p>
       </main>
     );
   }
@@ -833,51 +837,26 @@ export function GameLobbyScreen() {
           {toastMessage && <p className="toast">{toastMessage}</p>}
         </section>
 
-        {game.gameplayView === 'whowhatwhere' ? (
-          <WhoWhatWhereLobby
-            roomCode={roomCode}
-            roomState={roomState}
-            currentPlayer={currentPlayer}
-            isHost={isHost}
-            pendingAction={pendingAction}
-            teamNameDrafts={teamNameDrafts}
-            setTeamNameDraft={handleSetTeamNameDraft}
-            settingsForm={settingsForm}
-            updateSetting={handleUpdateSetting}
-            updateTeamName={updateTeamName}
-            error={error}
-            assignTeam={assignTeam}
-            startWarning={startWarning}
-          />
-        ) : game.gameplayView === 'hatgame' ? (
-          <HatGameLobby
-            roomCode={roomCode}
-            roomState={roomState}
-            currentPlayer={currentPlayer}
-            isHost={isHost}
-            pendingAction={pendingAction}
-            teamNameDrafts={teamNameDrafts}
-            setTeamNameDraft={handleSetTeamNameDraft}
-            settingsForm={settingsForm}
-            updateSetting={handleUpdateSetting}
-            updateTeamName={updateTeamName}
-            assignTeam={assignTeam}
-            lobbyPrivateState={lobbyPrivateState}
-            submitHatClues={handleSubmitHatClues}
-            setError={setError}
-            error={error}
-            startWarning={startWarning}
-            onToast={setToastMessage}
-            onPlaySubmitCue={() => playCue('submit')}
-          />
-        ) : (
-          <StandardLobby
-            roomState={roomState}
-            playerId={playerId}
-            error={error}
-            startWarning={startWarning}
-          />
-        )}
+        <LobbyComponent
+          roomCode={roomCode}
+          roomState={roomState}
+          currentPlayer={currentPlayer}
+          isHost={isHost}
+          pendingAction={pendingAction}
+          teamNameDrafts={teamNameDrafts}
+          setTeamNameDraft={handleSetTeamNameDraft}
+          settingsForm={settingsForm}
+          updateSetting={handleUpdateSetting}
+          updateTeamName={updateTeamName}
+          assignTeam={assignTeam}
+          lobbyPrivateState={lobbyPrivateState}
+          submitHatClues={handleSubmitHatClues}
+          setError={setError}
+          error={error}
+          playerId={playerId}
+          onToast={setToastMessage}
+          onPlaySubmitCue={() => playCue('submit')}
+        />
       </div>
 
       <div className="action-bar action-bar--actions-only">
@@ -886,11 +865,14 @@ export function GameLobbyScreen() {
             {currentPlayer?.ready ? 'Not ready' : 'Ready'}
           </button>
           {isHost && (
-            <button disabled={pendingAction === 'start'} onClick={handleStartGame}>
+            <button disabled={pendingAction === 'start' || Boolean(startHint)} onClick={handleStartGame}>
               Start game
             </button>
           )}
         </div>
+        <p className="helper-text">
+          {startHint ?? (isHost ? 'Start when everyone is set.' : 'The host starts the game.')}
+        </p>
       </div>
     </main>
   );
