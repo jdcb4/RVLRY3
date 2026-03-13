@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useAudioCues } from '../audio/AudioCueContext';
+import { fetchHatGameSuggestions } from '../games/contentApi';
 import { getGameModule } from '../games/registry';
 import { usePlaySession } from './PlaySessionContext';
 
@@ -12,26 +13,6 @@ const buildTeamRosters = (roomState) =>
     ...team,
     players: roomState.players.filter((player) => player.teamId === team.id)
   }));
-
-const fetchHatGameSuggestions = async (count) => {
-  const response = await fetch(
-    `/api/words/deck?type=guessing&category=${encodeURIComponent('Who')}&count=${count}`
-  );
-  if (!response.ok) {
-    throw new Error('Unable to load Who-list suggestions right now');
-  }
-
-  const payload = await response.json();
-  const words = Array.isArray(payload.words)
-    ? payload.words.map((word) => String(word ?? '').trim()).filter(Boolean)
-    : [];
-
-  if (words.length === 0) {
-    throw new Error('No Who-list suggestions are available right now');
-  }
-
-  return words;
-};
 
 function ArrowLeftIcon() {
   return (

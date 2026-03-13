@@ -5,13 +5,16 @@ RVLRY is a mobile-first party game web app with a shared launcher and extensible
 - **Imposter** (social deduction)
 - **WhoWhatWhere** (Articulate-style clue game)
 - **DrawNGuess** (Telestrations-style drawing chain)
+- **HatGame** (Celebrity!-style three-phase team game)
 
 ## Current progress
 
 - React + Vite front-end optimized for mobile screens.
 - Socket.IO room/lobby service for multi-device sessions.
 - Host-based room start flow with per-player private game payloads.
-- Local pass-and-play mode scaffold with handoff/reveal controls.
+- Full pass-and-play mode for every shipped game.
+- Shared game-core modules powering local and websocket rules for the larger game engines.
+- Audio cues for starts, ends, warnings, handoffs, and reveals.
 - Word list sync service integrated with WordListManager.
 - Startup + weekly sync with local word-cache fallback for uninterrupted game starts.
 - Railway-friendly deployment with optional Docker self-hosting.
@@ -41,6 +44,7 @@ The server syncs words at startup, refreshes weekly, and persists a local cache 
 Endpoints:
 
 - `GET /api/words/random?type=guessing|describing`
+- `GET /api/words/deck?type=guessing|describing&category=<name>&count=<n>`
 - `GET /api/words/status`
 - `POST /api/words/sync`
 

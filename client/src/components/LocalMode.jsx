@@ -3,8 +3,18 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { SoundToggle } from '../audio/SoundToggle';
 import { useAudioCues } from '../audio/AudioCueContext';
 import { useStageCue, useTimedTurnAudio } from '../audio/useGameAudio';
+import {
+  DrawingPad,
+  SummaryChips
+} from '../components/gameplay/SharedGameUi';
 import { getGameById } from '../games/config';
+import {
+  fetchHatGameSuggestions,
+  fetchRandomWord,
+  fetchWordDeck
+} from '../games/contentApi';
 import { getGameModule } from '../games/registry';
+import { formatCountdown, getCountdownSeconds } from '../games/timedTurns';
 import {
   applyLocalAction,
   buildLocalSession,
@@ -50,90 +60,11 @@ const syncHatGameClueSubmissions = (currentSubmissions, players, cluesPerPlayer)
     return nextSubmissions;
   }, {});
 
-const fetchJson = async (url) => {
-  const response = await fetch(url);
-  if (!response.ok) {
-    throw new Error('Unable to load game content');
-  }
-
-  return response.json();
-};
-
-const fetchPrompt = async (gameId) => {
-  const type = getLocalWordType(gameId);
-  const payload = await fetchJson(`/api/words/random?type=${encodeURIComponent(type)}`);
-  const prompt = String(payload.word ?? '').trim();
-  if (!prompt) {
-    throw new Error('No prompt available right now');
-  }
-
-  return prompt;
-};
-
-const fetchWhoWhatWhereDeck = async (count = 30) => {
-  const payload = await fetchJson(`/api/words/deck?type=guessing&count=${count}`);
-  const words = Array.isArray(payload.words)
-    ? payload.words.map((word) => String(word ?? '').trim()).filter(Boolean)
-    : [];
-
-  if (words.length === 0) {
-    throw new Error('No words available for this turn');
-  }
-
-  return {
-    category: String(payload.category ?? '').trim() || 'Mixed deck',
-    words
-  };
-};
-
-const fetchHatGameSuggestions = async (count) => {
-  const payload = await fetchJson(
-    `/api/words/deck?type=guessing&category=${encodeURIComponent('Who')}&count=${count}`
-  );
-  const words = Array.isArray(payload.words)
-    ? payload.words.map((word) => String(word ?? '').trim()).filter(Boolean)
-    : [];
-
-  if (words.length === 0) {
-    throw new Error('No Who-list clues are available right now');
-  }
-
-  return words;
-};
-
-const formatCountdown = (totalSeconds) => {
-  const safeSeconds = Math.max(0, totalSeconds);
-  const minutes = Math.floor(safeSeconds / 60);
-  const seconds = safeSeconds % 60;
-  return `${minutes}:${String(seconds).padStart(2, '0')}`;
-};
-
-const getCountdownSeconds = (endsAt) => {
-  if (!endsAt) {
-    return 0;
-  }
-
-  return Math.max(0, Math.ceil((new Date(endsAt).getTime() - Date.now()) / 1000));
-};
-
 const buildWhoWhatWhereRosters = (players, teams) =>
   (teams ?? []).map((team) => ({
     ...team,
     players: players.filter((player) => player.teamId === team.id)
   }));
-
-function SummaryChips({ items }) {
-  return (
-    <div className="summary-chips">
-      {items.filter(Boolean).map((item) => (
-        <div key={`${item.label}-${item.value}`} className="summary-chip">
-          <span className="summary-chip__label">{item.label}</span>
-          <strong className="summary-chip__value">{item.value}</strong>
-        </div>
-      ))}
-    </div>
-  );
-}
 
 function HandoffPanel({
   pill,
@@ -167,114 +98,6 @@ function HandoffPanel({
         {footer}
       </div>
     </section>
-  );
-}
-
-function DrawingPad({ prompt, disabled, onSubmit }) {
-  const canvasRef = useRef(null);
-  const drawingRef = useRef(false);
-
-  const initializeCanvas = useCallback(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) {
-      return;
-    }
-
-    const context = canvas.getContext('2d');
-    const ratio = window.devicePixelRatio || 1;
-    const width = 320;
-    const height = 220;
-
-    canvas.width = width * ratio;
-    canvas.height = height * ratio;
-    canvas.style.width = '100%';
-    canvas.style.maxWidth = '420px';
-    canvas.style.height = 'auto';
-
-    context.resetTransform?.();
-    context.scale(ratio, ratio);
-    context.fillStyle = '#ffffff';
-    context.fillRect(0, 0, width, height);
-    context.lineJoin = 'round';
-    context.lineCap = 'round';
-    context.lineWidth = 4;
-    context.strokeStyle = '#111111';
-  }, []);
-
-  useEffect(() => {
-    initializeCanvas();
-  }, [initializeCanvas, prompt]);
-
-  const getPoint = (event) => {
-    const canvas = canvasRef.current;
-    const rect = canvas.getBoundingClientRect();
-    return {
-      x: ((event.clientX - rect.left) / rect.width) * 320,
-      y: ((event.clientY - rect.top) / rect.height) * 220
-    };
-  };
-
-  const handlePointerDown = (event) => {
-    if (disabled) {
-      return;
-    }
-
-    const canvas = canvasRef.current;
-    const context = canvas.getContext('2d');
-    const point = getPoint(event);
-    drawingRef.current = true;
-    canvas.setPointerCapture(event.pointerId);
-    context.beginPath();
-    context.moveTo(point.x, point.y);
-  };
-
-  const handlePointerMove = (event) => {
-    if (!drawingRef.current || disabled) {
-      return;
-    }
-
-    const canvas = canvasRef.current;
-    const context = canvas.getContext('2d');
-    const point = getPoint(event);
-    context.lineTo(point.x, point.y);
-    context.stroke();
-  };
-
-  const endDrawing = (event) => {
-    if (!drawingRef.current) {
-      return;
-    }
-
-    drawingRef.current = false;
-    canvasRef.current?.releasePointerCapture?.(event.pointerId);
-  };
-
-  return (
-    <div className="field-stack">
-      <div className="role-card">
-        <span className="helper-text">Draw this prompt</span>
-        <strong className="role-card__title">{prompt}</strong>
-        <span className="role-card__body">Keep it readable. The next player only sees your sketch.</span>
-      </div>
-      <div className="canvas-wrap">
-        <canvas
-          ref={canvasRef}
-          className="drawing-surface"
-          onPointerDown={handlePointerDown}
-          onPointerMove={handlePointerMove}
-          onPointerUp={endDrawing}
-          onPointerLeave={endDrawing}
-        />
-      </div>
-      <div className="actions actions--stretch">
-        <button className="secondary-action" disabled={disabled} onClick={initializeCanvas}>
-          Clear sketch
-        </button>
-        <button disabled={disabled} onClick={() => onSubmit(canvasRef.current?.toDataURL('image/png'))}>
-          Submit drawing
-        </button>
-      </div>
-    </div>
   );
 }
 
@@ -1430,7 +1253,10 @@ export function LocalMode() {
     setError('');
 
     try {
-      const prompt = gameId === 'whowhatwhere' || gameId === 'hatgame' ? '' : await fetchPrompt(gameId);
+      const prompt =
+        gameId === 'whowhatwhere' || gameId === 'hatgame'
+          ? ''
+          : await fetchRandomWord(getLocalWordType(gameId));
       setSession(
         buildLocalSession({
           gameId,
@@ -1452,7 +1278,10 @@ export function LocalMode() {
     setError('');
 
     try {
-      const prompt = gameId === 'whowhatwhere' || gameId === 'hatgame' ? '' : await fetchPrompt(gameId);
+      const prompt =
+        gameId === 'whowhatwhere' || gameId === 'hatgame'
+          ? ''
+          : await fetchRandomWord(getLocalWordType(gameId));
       setSession(
         buildLocalSession({
           gameId,
@@ -1474,7 +1303,10 @@ export function LocalMode() {
     setError('');
 
     try {
-      const payload = gameId === 'whowhatwhere' ? await fetchWhoWhatWhereDeck(30) : {};
+      const payload =
+        gameId === 'whowhatwhere'
+          ? await fetchWordDeck({ type: 'guessing', count: 30 })
+          : {};
       setSession((currentSession) => {
         if (!currentSession) {
           return currentSession;
