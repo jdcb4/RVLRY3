@@ -60,6 +60,7 @@ export function PlaySessionProvider({ children, game }) {
   const [playerId, setPlayerId] = useState(null);
   const [roomState, setRoomState] = useState(null);
   const [privateState, setPrivateState] = useState(null);
+  const [lobbyPrivateState, setLobbyPrivateState] = useState(null);
   const [lastRoomCode, setLastRoomCode] = useState(() => readLastRoom(game.id));
   const [error, setError] = useState('');
   const [pendingAction, setPendingAction] = useState('');
@@ -73,6 +74,7 @@ export function PlaySessionProvider({ children, game }) {
     setPlayerId(null);
     setRoomState(null);
     setPrivateState(null);
+    setLobbyPrivateState(null);
     setLastRoomCode(readLastRoom(game.id));
     setError('');
   }, [game.id]);
@@ -111,6 +113,10 @@ export function PlaySessionProvider({ children, game }) {
       if (payload.phase !== 'in-progress') {
         setPrivateState(null);
       }
+
+      if (payload.phase === 'in-progress' || payload.gameId !== 'hatgame') {
+        setLobbyPrivateState(null);
+      }
     };
 
     const handlePrivateState = (payload) => {
@@ -121,11 +127,20 @@ export function PlaySessionProvider({ children, game }) {
       setPrivateState(payload);
     };
 
+    const handleLobbyPrivateState = (payload) => {
+      if (payload.gameId !== game.id) {
+        return;
+      }
+
+      setLobbyPrivateState(payload);
+    };
+
     socket.on('connect', handleConnect);
     socket.on('disconnect', handleDisconnect);
     socket.on('connect_error', handleConnectError);
     socket.on('room:update', handleRoomUpdate);
     socket.on('game:private', handlePrivateState);
+    socket.on('room:private', handleLobbyPrivateState);
 
     return () => {
       socket.off('connect', handleConnect);
@@ -133,6 +148,7 @@ export function PlaySessionProvider({ children, game }) {
       socket.off('connect_error', handleConnectError);
       socket.off('room:update', handleRoomUpdate);
       socket.off('game:private', handlePrivateState);
+      socket.off('room:private', handleLobbyPrivateState);
       socket.disconnect();
       socketRef.current = null;
     };
@@ -371,6 +387,17 @@ export function PlaySessionProvider({ children, game }) {
     [runRoomAction]
   );
 
+  const submitHatClues = useCallback(
+    async (code, clues) => {
+      const normalizedCode = normalizeCode(code);
+      return runRoomAction('submit-hat-clues', 'room:submit-hat-clues', {
+        code: normalizedCode,
+        clues
+      });
+    },
+    [runRoomAction]
+  );
+
   const startGame = useCallback(
     async (code) => {
       const normalizedCode = normalizeCode(code);
@@ -409,6 +436,7 @@ export function PlaySessionProvider({ children, game }) {
       currentPlayer,
       roomState,
       privateState,
+      lobbyPrivateState,
       lastRoomCode,
       error,
       setError,
@@ -420,6 +448,7 @@ export function PlaySessionProvider({ children, game }) {
       assignTeam,
       updateTeamName,
       updateRoomSettings,
+      submitHatClues,
       setReady,
       startGame,
       sendGameAction,
@@ -435,6 +464,7 @@ export function PlaySessionProvider({ children, game }) {
       game,
       joinRoom,
       lastRoomCode,
+      lobbyPrivateState,
       pendingAction,
       playerId,
       playerName,
@@ -445,6 +475,7 @@ export function PlaySessionProvider({ children, game }) {
       setPlayerName,
       setReady,
       startGame,
+      submitHatClues,
       updateRoomSettings,
       updateTeamName
     ]

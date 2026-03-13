@@ -192,6 +192,23 @@ summary:focus-visible {
   color: var(--muted);
 }
 
+.topbar__pill--button {
+  cursor: pointer;
+  background: rgba(9, 25, 29, 0.7);
+  color: var(--text);
+}
+
+.topbar__pill--button:hover {
+  background: rgba(255, 255, 255, 0.08);
+  box-shadow: none;
+}
+
+.topbar__pill--compact {
+  min-height: 38px;
+  padding: 0.45rem 0.8rem;
+  font-size: 0.82rem;
+}
+
 .hub-shell,
 .scene {
   width: min(1040px, calc(100% - 1rem));

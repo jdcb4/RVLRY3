@@ -11,6 +11,10 @@ const TEST_DATA = {
     { word: 'Castle', category: 'Places' }
   ],
   guessing: [
+    { word: 'Albert Einstein', category: 'Who' },
+    { word: 'Wonder Woman', category: 'Who' },
+    { word: 'Sherlock Holmes', category: 'Who' },
+    { word: 'Beyonce', category: 'Who' },
     { word: 'Lion', category: 'Animals' },
     { word: 'Tiger', category: 'Animals' },
     { word: 'Panda', category: 'Animals' },
@@ -85,7 +89,8 @@ const closeServer = (httpServer) =>
 const connectHarness = async (baseUrl) => {
   const state = {
     room: null,
-    privateState: null
+    privateState: null,
+    lobbyPrivateState: null
   };
   const socket = ioClient(baseUrl, {
     autoConnect: false,
@@ -99,6 +104,9 @@ const connectHarness = async (baseUrl) => {
   });
   socket.on('game:private', (payload) => {
     state.privateState = payload;
+  });
+  socket.on('room:private', (payload) => {
+    state.lobbyPrivateState = payload;
   });
 
   socket.connect();
@@ -442,5 +450,120 @@ describe.sequential('RVLRY server integration', () => {
     const returned = await host.emit('room:return-to-lobby', { code: roomCode });
     expect(returned.ok).toBe(true);
     await waitFor(() => host.state.room.phase === 'lobby', 'drawnguess room to return to lobby');
+  });
+
+  it('completes a HatGame match across all three phases', async () => {
+    harnesses = await Promise.all(Array.from({ length: 4 }, () => connectHarness(baseUrl)));
+    const [host, ...guests] = harnesses;
+
+    const createdRoom = await host.emit('room:create', {
+      gameId: 'hatgame',
+      playerName: 'Hana',
+      playerToken: 'hat-host'
+    });
+    host.playerId = createdRoom.playerId;
+    const roomCode = createdRoom.code;
+
+    const guestNames = ['Ivy', 'Jules', 'Kye'];
+    for (const [index, guest] of guests.entries()) {
+      const joinedRoom = await guest.emit('room:join', {
+        code: roomCode,
+        playerName: guestNames[index],
+        playerToken: `hat-guest-${index}`
+      });
+      guest.playerId = joinedRoom.playerId;
+    }
+
+    await waitFor(() => host.state.room?.players?.length === 4, 'all hatgame players to join');
+
+    const updatedSettings = await host.emit('room:update-settings', {
+      code: roomCode,
+      settings: {
+        teamCount: 2,
+        turnDurationSeconds: 30,
+        cluesPerPlayer: 3,
+        skipsPerTurn: 1
+      }
+    });
+    expect(updatedSettings.ok).toBe(true);
+
+    const clueSets = [
+      ['Albert Einstein', 'Wonder Woman', 'Sherlock Holmes'],
+      ['Beyonce', 'Black Panther', 'Darth Vader'],
+      ['Hermione Granger', 'Spider-Man', 'Oprah Winfrey'],
+      ['Batman', 'Taylor Swift', 'Indiana Jones']
+    ];
+
+    for (const [index, harness] of harnesses.entries()) {
+      const response = await harness.emit('room:submit-hat-clues', {
+        code: roomCode,
+        clues: clueSets[index]
+      });
+      expect(response.ok).toBe(true);
+    }
+
+    await waitFor(
+      () =>
+        harnesses.every(
+          (harness) => harness.state.lobbyPrivateState?.hasSubmitted === true
+        ),
+      'hatgame clue submissions'
+    );
+
+    for (const harness of harnesses) {
+      const response = await harness.emit('room:ready', {
+        code: roomCode,
+        ready: true
+      });
+      expect(response.ok).toBe(true);
+    }
+
+    const started = await host.emit('room:start', { code: roomCode });
+    expect(started.ok).toBe(true);
+
+    await waitFor(
+      () => harnesses.every((harness) => harness.state.room?.phase === 'in-progress' && harness.state.privateState),
+      'hatgame match to start'
+    );
+
+    const playersById = new Map(harnesses.map((harness) => [harness.playerId, harness]));
+
+    for (let phaseNumber = 1; phaseNumber <= 3; phaseNumber += 1) {
+      await waitFor(
+        () =>
+          host.state.room.gamePublicState.stage === 'ready' &&
+          host.state.room.gamePublicState.phaseNumber === phaseNumber,
+        `hatgame phase ${phaseNumber} ready state`
+      );
+
+      const describerId = host.state.room.gamePublicState.activeDescriberId;
+      const describerHarness = playersById.get(describerId);
+      const startedTurn = await describerHarness.emit('game:action', {
+        code: roomCode,
+        type: 'start-turn',
+        payload: {}
+      });
+      expect(startedTurn.ok).toBe(true);
+
+      await waitFor(() => host.state.room.gamePublicState.stage === 'turn', `hatgame phase ${phaseNumber} turn`);
+
+      while (host.state.room.gamePublicState.stage === 'turn') {
+        const response = await describerHarness.emit('game:action', {
+          code: roomCode,
+          type: 'mark-correct',
+          payload: {}
+        });
+        expect(response.ok).toBe(true);
+      }
+    }
+
+    await waitFor(() => host.state.room.gamePublicState.stage === 'game-over', 'hatgame results');
+
+    expect(host.state.room.gamePublicState.results.totalClues).toBe(12);
+    expect(host.state.room.gamePublicState.results.leaderboard).toHaveLength(2);
+
+    const returned = await host.emit('room:return-to-lobby', { code: roomCode });
+    expect(returned.ok).toBe(true);
+    await waitFor(() => host.state.room.phase === 'lobby', 'hatgame room to return to lobby');
   });
 });

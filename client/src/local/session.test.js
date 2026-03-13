@@ -3,6 +3,7 @@ import {
   applyLocalAction,
   buildLocalSession,
   createLocalPlayers,
+  DEFAULT_LOCAL_HATGAME_SETTINGS,
   DEFAULT_LOCAL_WHOWHATWHERE_SETTINGS,
   getActiveImposterPlayer,
   getImposterSecretForPlayer,
@@ -134,5 +135,48 @@ describe('local pass-and-play session engine', () => {
       'drawing',
       'guess'
     ]);
+  });
+
+  it('plays a full local HatGame across describe, one-word, and charades', () => {
+    const players = rebalanceWhoWhatWherePlayers(createLocalPlayers(4), 2);
+    const settings = {
+      ...DEFAULT_LOCAL_HATGAME_SETTINGS,
+      teamCount: 2,
+      cluesPerPlayer: 3
+    };
+
+    let session = buildLocalSession({
+      gameId: 'hatgame',
+      players,
+      settings,
+      lobbyState: {
+        clueSubmissions: {
+          [players[0].id]: { clues: ['Albert Einstein', 'Wonder Woman', 'Sherlock Holmes'] },
+          [players[1].id]: { clues: ['Beyonce', 'Black Panther', 'Darth Vader'] },
+          [players[2].id]: { clues: ['Hermione Granger', 'Spider-Man', 'Oprah Winfrey'] },
+          [players[3].id]: { clues: ['Batman', 'Taylor Swift', 'Indiana Jones'] }
+        }
+      },
+      rng: () => 0.5
+    });
+
+    expect(getWhoWhatWhereContext(session).activeTeamPlayers).toHaveLength(2);
+
+    for (let phaseNumber = 1; phaseNumber <= 3; phaseNumber += 1) {
+      expect(session.phaseNumber).toBe(phaseNumber);
+
+      session = applyLocalAction(session, {
+        type: 'start-turn',
+        payload: {}
+      });
+
+      while (session.stage === 'turn') {
+        session = applyLocalAction(session, { type: 'mark-correct' });
+      }
+    }
+
+    expect(session.stage).toBe('results');
+    expect(session.results.totalClues).toBe(12);
+    expect(session.results.leaderboard).toHaveLength(2);
   });
 });

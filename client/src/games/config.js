@@ -44,6 +44,22 @@ export const games = [
     supportsLocal: true,
     lobbyFeatures: ['ready-check', 'invite-link', 'host-start'],
     gameplayView: 'drawnguess'
+  },
+  {
+    id: 'hatgame',
+    name: 'HatGame',
+    tagline: 'Three phases, one shared clue pool, escalating chaos.',
+    description: 'Celebrity!-style team rounds where the same people return for describe, one-word, and charades phases.',
+    howToPlay: [
+      'Split into 2 to 4 teams, then have each player submit a set of person-name clues.',
+      'Phase 1 allows full descriptions, Phase 2 limits you to one word, and Phase 3 is silent charades.',
+      'The same clue pool resets each phase, so memorable clues early pay off later.'
+    ],
+    minPlayers: 4,
+    supportsLocal: true,
+    lobbyFeatures: ['team-select', 'clue-submit', 'ready-check', 'invite-link', 'host-start'],
+    gameplayView: 'hatgame',
+    teamBased: true
   }
 ];
 

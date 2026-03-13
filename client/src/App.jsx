@@ -17,7 +17,7 @@ function Home() {
           and keep the live round focused on what players need right now.
         </p>
         <div className="facts-row">
-          <span className="fact-chip">3 live games</span>
+          <span className="fact-chip">{games.length} live games</span>
           <span className="fact-chip">Share by room code</span>
           <span className="fact-chip">No app install</span>
         </div>

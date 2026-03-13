@@ -1,20 +1,26 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
+import { SoundToggle } from '../audio/SoundToggle';
+import { useAudioCues } from '../audio/AudioCueContext';
+import { useStageCue, useTimedTurnAudio } from '../audio/useGameAudio';
 import { getGameById } from '../games/config';
 import {
   applyLocalAction,
   buildLocalSession,
   buildLocalTeams,
   createLocalPlayers,
+  DEFAULT_LOCAL_HATGAME_SETTINGS,
   DEFAULT_LOCAL_PLAYER_COUNT,
   DEFAULT_LOCAL_WHOWHATWHERE_SETTINGS,
   getActiveImposterPlayer,
+  getHatGamePhaseMeta,
   getImposterSecretForPlayer,
   getLocalStartError,
   getLocalWordType,
   getWhoWhatWhereContext,
   MAX_LOCAL_CLUE_LENGTH,
   MAX_LOCAL_GUESS_LENGTH,
+  MAX_LOCAL_HATGAME_CLUE_LENGTH,
   rebalanceWhoWhatWherePlayers
 } from '../local/session';
 
@@ -27,7 +33,9 @@ const localInstructions = {
   whowhatwhere:
     'Build the teams on one screen, hand the phone to the describer, and run the timer locally.',
   drawnguess:
-    'Pass the device from player to player, alternating hidden drawings and guesses until the chain is revealed.'
+    'Pass the device from player to player, alternating hidden drawings and guesses until the chain is revealed.',
+  hatgame:
+    'Build teams, let each player add person-name clues, then reuse the same clue pool across describe, one-word, and charades phases.'
 };
 
 const createLocalPlayerId = () =>
@@ -35,8 +43,22 @@ const createLocalPlayerId = () =>
 
 const getInitialPlayers = (gameId, settings = DEFAULT_LOCAL_WHOWHATWHERE_SETTINGS) =>
   createLocalPlayers(DEFAULT_LOCAL_PLAYER_COUNT[gameId] ?? 4, {
-    teamCount: gameId === 'whowhatwhere' ? settings.teamCount : null
+    teamCount: gameId === 'whowhatwhere' || gameId === 'hatgame' ? settings.teamCount : null
   });
+
+const getInitialSettingsForGame = (gameId) =>
+  gameId === 'hatgame' ? DEFAULT_LOCAL_HATGAME_SETTINGS : DEFAULT_LOCAL_WHOWHATWHERE_SETTINGS;
+
+const buildEmptyHatGameClues = (count) => Array.from({ length: count }, () => '');
+
+const syncHatGameClueSubmissions = (currentSubmissions, players, cluesPerPlayer) =>
+  players.reduce((nextSubmissions, player) => {
+    const currentClues = currentSubmissions[player.id]?.clues ?? [];
+    nextSubmissions[player.id] = {
+      clues: Array.from({ length: cluesPerPlayer }, (_, index) => currentClues[index] ?? '')
+    };
+    return nextSubmissions;
+  }, {});
 
 const fetchJson = async (url) => {
   const response = await fetch(url);
@@ -72,6 +94,21 @@ const fetchWhoWhatWhereDeck = async (count = 30) => {
     category: String(payload.category ?? '').trim() || 'Mixed deck',
     words
   };
+};
+
+const fetchHatGameSuggestions = async (count) => {
+  const payload = await fetchJson(
+    `/api/words/deck?type=guessing&category=${encodeURIComponent('Who')}&count=${count}`
+  );
+  const words = Array.isArray(payload.words)
+    ? payload.words.map((word) => String(word ?? '').trim()).filter(Boolean)
+    : [];
+
+  if (words.length === 0) {
+    throw new Error('No Who-list clues are available right now');
+  }
+
+  return words;
 };
 
 const formatCountdown = (totalSeconds) => {
@@ -313,6 +350,63 @@ function LocalPlayersEditor({
   );
 }
 
+function LocalHatGameClueEditor({
+  players,
+  clueSubmissions,
+  cluesPerPlayer,
+  busyAction,
+  onChangeClue,
+  onGenerateClues
+}) {
+  return (
+    <section className="panel panel--stacked">
+      <div className="panel-heading">
+        <h2>Clue packs</h2>
+        <p>Each player adds person names here. Use the Who list button for a quick editable draft.</p>
+      </div>
+
+      <div className="local-player-grid">
+        {players.map((player) => {
+          const clues = clueSubmissions[player.id]?.clues ?? buildEmptyHatGameClues(cluesPerPlayer);
+
+          return (
+            <article key={`hat-setup-${player.id}`} className="local-player-card">
+              <div className="panel-heading">
+                <h3>{player.name}</h3>
+                <p>{clues.filter((clue) => clue.trim().length > 0).length} / {cluesPerPlayer} ready</p>
+              </div>
+
+              <div className="field-stack">
+                {clues.map((clue, index) => (
+                  <label key={`${player.id}-clue-${index}`} className="settings-field">
+                    <span className="helper-text">Clue {index + 1}</span>
+                    <input
+                      value={clue}
+                      maxLength={MAX_LOCAL_HATGAME_CLUE_LENGTH}
+                      placeholder="Enter a person name"
+                      onChange={(event) => onChangeClue(player.id, index, event.target.value)}
+                    />
+                  </label>
+                ))}
+              </div>
+
+              <button
+                className="secondary-action"
+                disabled={busyAction === `generate-hat-clues:${player.id}`}
+                onClick={() => onGenerateClues(player.id)}
+              >
+                {busyAction === `generate-hat-clues:${player.id}`
+                  ? 'Loading suggestions'
+                  : 'Generate from Who list'}
+              </button>
+            </article>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
 function ResultsActions({ onPlayAgain, onResetSetup, busyAction }) {
   return (
     <div className="actions actions--stretch">
@@ -337,6 +431,12 @@ function LocalImposterView({
   const [clueText, setClueText] = useState('');
   const activePlayer = getActiveImposterPlayer(session);
   const secret = activePlayer ? getImposterSecretForPlayer(session, activePlayer.id) : null;
+
+  useStageCue(session.stage, {
+    clues: 'phase-change',
+    voting: 'phase-change',
+    results: 'results-reveal'
+  });
 
   useEffect(() => {
     setIsRevealed(false);
@@ -531,6 +631,15 @@ function LocalWhoWhatWhereView({
     () => buildWhoWhatWhereRosters(session.players, session.teams),
     [session.players, session.teams]
   );
+
+  useTimedTurnAudio({
+    active: session.stage === 'turn',
+    turnKey: `${session.roundNumber}:${context.activeTeamId}:${context.activeDescriberId}`,
+    endsAt: session.activeTurn?.endsAt
+  });
+  useStageCue(session.stage, {
+    results: 'results-reveal'
+  });
 
   useEffect(() => {
     setHandoffVisible(false);
@@ -734,6 +843,12 @@ function LocalDrawNGuessView({
   const activePlayer = session.players.find((player) => player.id === session.activePlayerId) ?? null;
   const previousEntry = session.chain.at(-1);
 
+  useStageCue(session.stage, {
+    draw: 'handoff',
+    guess: 'handoff',
+    results: 'results-reveal'
+  });
+
   useEffect(() => {
     setIsRevealed(false);
     setGuessText('');
@@ -834,32 +949,329 @@ function LocalDrawNGuessView({
   );
 }
 
+function LocalHatGameView({
+  session,
+  applyAction,
+  busyAction,
+  onStartTurn,
+  onPlayAgain,
+  onResetSetup
+}) {
+  const { playCue } = useAudioCues();
+  const [handoffVisible, setHandoffVisible] = useState(false);
+  const [secondsRemaining, setSecondsRemaining] = useState(() =>
+    getCountdownSeconds(session.activeTurn?.endsAt)
+  );
+  const context = getWhoWhatWhereContext(session);
+  const phaseMeta = getHatGamePhaseMeta(session.phaseNumber);
+  const teamRosters = useMemo(
+    () => buildWhoWhatWhereRosters(session.players, session.teams),
+    [session.players, session.teams]
+  );
+  const previousPhaseRef = useRef(session.phaseNumber);
+
+  useTimedTurnAudio({
+    active: session.stage === 'turn',
+    turnKey: `${session.phaseNumber}:${session.roundNumber}:${context.activeTeamId}:${context.activeDescriberId}`,
+    endsAt: session.activeTurn?.endsAt
+  });
+  useStageCue(session.stage, {
+    results: 'results-reveal'
+  });
+
+  useEffect(() => {
+    if (session.phaseNumber > previousPhaseRef.current) {
+      playCue('phase-change');
+    }
+
+    previousPhaseRef.current = session.phaseNumber;
+  }, [playCue, session.phaseNumber]);
+
+  useEffect(() => {
+    setHandoffVisible(false);
+  }, [session.stage, session.phaseNumber, session.roundNumber, session.teamIndex]);
+
+  useEffect(() => {
+    if (session.stage !== 'turn' || !session.activeTurn?.endsAt) {
+      setSecondsRemaining(0);
+      return undefined;
+    }
+
+    const tick = () => {
+      const remaining = getCountdownSeconds(session.activeTurn.endsAt);
+      setSecondsRemaining(remaining);
+      if (remaining <= 0) {
+        applyAction({ type: 'end-turn' });
+      }
+    };
+
+    tick();
+    const intervalId = window.setInterval(tick, 250);
+    return () => window.clearInterval(intervalId);
+  }, [applyAction, session.activeTurn?.endsAt, session.stage]);
+
+  if (session.stage === 'turn') {
+    const currentClue = session.activeTurn?.clueQueue[session.activeTurn?.queueIndex]?.text ?? 'Loading';
+
+    return (
+      <div className="gameplay-stack">
+        <section className="panel panel--hero panel--stacked gameplay-primary">
+          <div className="panel-heading">
+            <p className="status-pill">Phase {session.phaseNumber}: {phaseMeta.name}</p>
+            <h2>{context.activeDescriberName} is describing</h2>
+            <p>{phaseMeta.instruction}</p>
+          </div>
+
+          <div className="turn-hero">
+            <div className="turn-hero__clock">
+              <span className="helper-text">Time left</span>
+              <strong>{formatCountdown(secondsRemaining)}</strong>
+            </div>
+            <div className="turn-hero__score">
+              <span className="helper-text">Skips left</span>
+              <strong>{session.activeTurn?.skipsRemaining ?? 0}</strong>
+            </div>
+          </div>
+
+          <div className="role-card">
+            <span className="helper-text">Current clue</span>
+            <strong className="role-card__title">{currentClue}</strong>
+            <span className="role-card__body">
+              {session.activeTurn?.skippedCluePoolIndex !== null
+                ? 'A skipped clue is in the deck and must be solved before another skip.'
+                : phaseMeta.instruction}
+            </span>
+          </div>
+
+          <SummaryChips
+            items={[
+              { label: 'Team', value: context.activeTeam?.name ?? 'Team' },
+              { label: 'Score', value: session.activeTurn?.score ?? 0 },
+              { label: 'Correct', value: session.activeTurn?.correctCount ?? 0 }
+            ]}
+          />
+
+          <div className="actions actions--stretch">
+            <button onClick={() => applyAction({ type: 'mark-correct' })}>Correct</button>
+            <button
+              className="secondary-action"
+              disabled={session.activeTurn?.skippedCluePoolIndex !== null || session.activeTurn?.skipsRemaining <= 0}
+              onClick={() => applyAction({ type: 'skip-clue' })}
+            >
+              Skip
+            </button>
+            <button className="secondary-action" onClick={() => applyAction({ type: 'end-turn' })}>
+              End turn
+            </button>
+          </div>
+        </section>
+      </div>
+    );
+  }
+
+  if (session.stage === 'results') {
+    return (
+      <div className="gameplay-stack">
+        <section className="panel panel--hero panel--stacked gameplay-primary">
+          <div className="panel-heading">
+            <p className="status-pill">HatGame complete</p>
+            <h2>{session.results?.isTie ? 'Tie game' : 'Final leaderboard'}</h2>
+            <p>All three phases are complete and the shared clue pool is finished.</p>
+          </div>
+
+          <SummaryChips
+            items={[
+              { label: 'Teams', value: session.teams.length },
+              { label: 'Clues', value: session.results?.totalClues ?? 0 },
+              { label: 'Players', value: session.players.length }
+            ]}
+          />
+
+          <ul className="player-list">
+            {(session.results?.leaderboard ?? []).map((entry) => (
+              <li key={entry.teamId} className="player-row player-row--compact">
+                <div className="player-row__identity">
+                  <span className="player-row__name">{entry.teamName}</span>
+                </div>
+                <span className={(session.results?.winnerTeamIds ?? []).includes(entry.teamId) ? 'badge badge--ready' : 'badge'}>
+                  {entry.score} pts
+                </span>
+              </li>
+            ))}
+          </ul>
+
+          <ResultsActions busyAction={busyAction} onPlayAgain={onPlayAgain} onResetSetup={onResetSetup} />
+        </section>
+      </div>
+    );
+  }
+
+  return (
+    <div className="gameplay-stack">
+      <section className="panel panel--hero panel--stacked gameplay-primary">
+        <div className="panel-heading">
+          <p className="status-pill">Phase {session.phaseNumber}: {phaseMeta.name}</p>
+          <h2>{context.activeTeam?.name ?? 'Next team'} are up next</h2>
+          <p>{context.activeDescriberName} is the describer for this turn.</p>
+        </div>
+
+        <SummaryChips
+          items={[
+            { label: 'Rule', value: phaseMeta.name },
+            { label: 'Describer', value: context.activeDescriberName },
+            { label: 'Turn length', value: `${session.settings.turnDurationSeconds}s` }
+          ]}
+        />
+
+        <div className="notice-card notice-card--focus">
+          <strong>Current phase rule</strong>
+          <p>{phaseMeta.instruction}</p>
+        </div>
+
+        {session.lastTurnSummary?.phaseCompleted && (
+          <div className="notice-card notice-card--focus">
+            <strong>Phase {session.lastTurnSummary.completedPhaseNumber} complete</strong>
+            <p>
+              {session.lastTurnSummary.nextPhaseName
+                ? `Next phase: ${session.lastTurnSummary.nextPhaseName}. Same clues, tougher rule.`
+                : 'That was the final phase.'}
+            </p>
+          </div>
+        )}
+
+        <HandoffPanel
+          pill="Pass to describer"
+          title={`Give the phone to ${context.activeDescriberName}`}
+          description={`${context.activeTeam?.name ?? 'The next team'} should be ready to guess before the clock starts.`}
+          isRevealed={handoffVisible}
+          onReveal={() => setHandoffVisible(true)}
+          onHide={() => setHandoffVisible(false)}
+          footer={
+            handoffVisible ? (
+              <button disabled={busyAction === 'start-turn'} onClick={onStartTurn}>
+                Start turn
+              </button>
+            ) : null
+          }
+        >
+          <div className="notice-card">
+            <strong>Reuse the same clue pool with a new rule</strong>
+            <p>{phaseMeta.instruction}</p>
+          </div>
+        </HandoffPanel>
+      </section>
+
+      <section className="panel panel--stacked">
+        <div className="panel-heading">
+          <h2>Scoreboard</h2>
+        </div>
+
+        <ul className="player-list">
+          {teamRosters.map((team) => (
+            <li key={team.id} className="player-row player-row--compact">
+              <div className="player-row__identity">
+                <span className="player-row__name">{team.name}</span>
+                <span className="helper-text">{team.players.map((player) => player.name).join(', ')}</span>
+              </div>
+              <span className={team.id === context.activeTeamId ? 'badge badge--ready' : 'badge'}>
+                {team.score} pts
+              </span>
+            </li>
+          ))}
+        </ul>
+
+        {session.lastTurnSummary && (
+          <div className="field-stack">
+            <div className="panel-heading">
+              <h3>Latest turn</h3>
+              <p>
+                {session.lastTurnSummary.teamName} with {session.lastTurnSummary.describerName}
+              </p>
+            </div>
+            <SummaryChips
+              items={[
+                { label: 'Score change', value: session.lastTurnSummary.scoreDelta },
+                { label: 'Correct', value: session.lastTurnSummary.correctCount },
+                { label: 'Skipped', value: session.lastTurnSummary.skippedCount }
+              ]}
+            />
+          </div>
+        )}
+      </section>
+    </div>
+  );
+}
+
 export function LocalMode() {
   const { gameId } = useParams();
   const navigate = useNavigate();
+  const { playCue } = useAudioCues();
   const game = getGameById(gameId);
-  const [settings, setSettings] = useState(DEFAULT_LOCAL_WHOWHATWHERE_SETTINGS);
-  const [players, setPlayers] = useState(() => getInitialPlayers(gameId, DEFAULT_LOCAL_WHOWHATWHERE_SETTINGS));
+  const [settings, setSettings] = useState(() => getInitialSettingsForGame(gameId));
+  const [players, setPlayers] = useState(() =>
+    getInitialPlayers(gameId, getInitialSettingsForGame(gameId))
+  );
+  const [hatClueSubmissions, setHatClueSubmissions] = useState(() =>
+    syncHatGameClueSubmissions(
+      {},
+      getInitialPlayers(gameId, getInitialSettingsForGame(gameId)),
+      getInitialSettingsForGame(gameId).cluesPerPlayer ?? DEFAULT_LOCAL_HATGAME_SETTINGS.cluesPerPlayer
+    )
+  );
   const [session, setSession] = useState(null);
   const [busyAction, setBusyAction] = useState('');
   const [error, setError] = useState('');
 
   useEffect(() => {
-    setSettings(DEFAULT_LOCAL_WHOWHATWHERE_SETTINGS);
-    setPlayers(getInitialPlayers(gameId, DEFAULT_LOCAL_WHOWHATWHERE_SETTINGS));
+    const nextSettings = getInitialSettingsForGame(gameId);
+    const nextPlayers = getInitialPlayers(gameId, nextSettings);
+
+    setSettings(nextSettings);
+    setPlayers(nextPlayers);
+    setHatClueSubmissions(
+      syncHatGameClueSubmissions(
+        {},
+        nextPlayers,
+        nextSettings.cluesPerPlayer ?? DEFAULT_LOCAL_HATGAME_SETTINGS.cluesPerPlayer
+      )
+    );
     setSession(null);
     setBusyAction('');
     setError('');
   }, [gameId]);
 
+  useEffect(() => {
+    if (gameId !== 'hatgame') {
+      setHatClueSubmissions({});
+      return;
+    }
+
+    setHatClueSubmissions((currentSubmissions) =>
+      syncHatGameClueSubmissions(
+        currentSubmissions,
+        players,
+        settings.cluesPerPlayer ?? DEFAULT_LOCAL_HATGAME_SETTINGS.cluesPerPlayer
+      )
+    );
+  }, [gameId, players, settings.cluesPerPlayer]);
+
   const teams = useMemo(
-    () => (gameId === 'whowhatwhere' ? buildLocalTeams(settings.teamCount) : EMPTY_TEAMS),
+    () =>
+      gameId === 'whowhatwhere' || gameId === 'hatgame'
+        ? buildLocalTeams(settings.teamCount)
+        : EMPTY_TEAMS,
     [gameId, settings.teamCount]
   );
 
   const startWarning = useMemo(
-    () => getLocalStartError({ gameId, players, settings }),
-    [gameId, players, settings]
+    () =>
+      getLocalStartError({
+        gameId,
+        players,
+        settings,
+        lobbyState: { clueSubmissions: hatClueSubmissions }
+      }),
+    [gameId, hatClueSubmissions, players, settings]
   );
 
   const replacePlayers = useCallback((updater) => {
@@ -898,13 +1310,14 @@ export function LocalMode() {
     setError('');
 
     try {
-      const prompt = gameId === 'whowhatwhere' ? '' : await fetchPrompt(gameId);
+      const prompt = gameId === 'whowhatwhere' || gameId === 'hatgame' ? '' : await fetchPrompt(gameId);
       setSession(
         buildLocalSession({
           gameId,
           players,
           prompt,
-          settings
+          settings,
+          lobbyState: { clueSubmissions: hatClueSubmissions }
         })
       );
     } catch (sessionError) {
@@ -912,20 +1325,21 @@ export function LocalMode() {
     } finally {
       setBusyAction('');
     }
-  }, [gameId, players, settings, startWarning]);
+  }, [gameId, hatClueSubmissions, players, settings, startWarning]);
 
   const playAgain = useCallback(async () => {
     setBusyAction('restart');
     setError('');
 
     try {
-      const prompt = gameId === 'whowhatwhere' ? '' : await fetchPrompt(gameId);
+      const prompt = gameId === 'whowhatwhere' || gameId === 'hatgame' ? '' : await fetchPrompt(gameId);
       setSession(
         buildLocalSession({
           gameId,
           players,
           prompt,
-          settings
+          settings,
+          lobbyState: { clueSubmissions: hatClueSubmissions }
         })
       );
     } catch (sessionError) {
@@ -933,14 +1347,14 @@ export function LocalMode() {
     } finally {
       setBusyAction('');
     }
-  }, [gameId, players, settings]);
+  }, [gameId, hatClueSubmissions, players, settings]);
 
-  const startWhoWhatWhereTurn = useCallback(async () => {
+  const startTimedTeamTurn = useCallback(async () => {
     setBusyAction('start-turn');
     setError('');
 
     try {
-      const deck = await fetchWhoWhatWhereDeck(30);
+      const payload = gameId === 'whowhatwhere' ? await fetchWhoWhatWhereDeck(30) : {};
       setSession((currentSession) => {
         if (!currentSession) {
           return currentSession;
@@ -948,7 +1362,7 @@ export function LocalMode() {
 
         const result = applyLocalAction(currentSession, {
           type: 'start-turn',
-          payload: deck
+          payload
         });
 
         if (result?.error) {
@@ -963,7 +1377,7 @@ export function LocalMode() {
     } finally {
       setBusyAction('');
     }
-  }, []);
+  }, [gameId]);
 
   const handleRenamePlayer = (playerId, name) => {
     replacePlayers((currentPlayers) =>
@@ -1007,17 +1421,58 @@ export function LocalMode() {
     replacePlayers((currentPlayers) => currentPlayers.filter((player) => player.id !== playerId));
   };
 
-  const handleUpdateWhoWhatWhereSetting = (key, value) => {
+  const handleUpdateTeamSetting = (key, value) => {
     const nextSettings = {
       ...settings,
       [key]: value
     };
     setSettings(nextSettings);
 
-    if (key === 'teamCount') {
+    if (key === 'teamCount' && (gameId === 'whowhatwhere' || gameId === 'hatgame')) {
       setPlayers((currentPlayers) => rebalanceWhoWhatWherePlayers(currentPlayers, value));
     }
   };
+
+  const handleChangeHatGameClue = (playerId, clueIndex, value) => {
+    setHatClueSubmissions((currentSubmissions) => ({
+      ...currentSubmissions,
+      [playerId]: {
+        clues: (currentSubmissions[playerId]?.clues ?? buildEmptyHatGameClues(settings.cluesPerPlayer)).map(
+          (clue, index) => (index === clueIndex ? value : clue)
+        )
+      }
+    }));
+  };
+
+  const handleGenerateHatGameClues = useCallback(
+    async (playerId) => {
+      setBusyAction(`generate-hat-clues:${playerId}`);
+      setError('');
+
+      try {
+        const suggestions = await fetchHatGameSuggestions(settings.cluesPerPlayer);
+        setHatClueSubmissions((currentSubmissions) => ({
+          ...currentSubmissions,
+          [playerId]: {
+            clues: Array.from(
+              { length: settings.cluesPerPlayer },
+              (_, index) => suggestions[index] ?? currentSubmissions[playerId]?.clues?.[index] ?? ''
+            )
+          }
+        }));
+        playCue('submit');
+      } catch (generateError) {
+        setError(
+          generateError instanceof Error
+            ? generateError.message
+            : 'Unable to load HatGame clue suggestions'
+        );
+      } finally {
+        setBusyAction('');
+      }
+    },
+    [playCue, settings.cluesPerPlayer]
+  );
 
   const handleResetSetup = () => {
     setSession(null);
@@ -1044,6 +1499,9 @@ export function LocalMode() {
         <p className="scene__eyebrow">Pass and play</p>
         <h1 className="scene__title">{game.name}</h1>
         <p className="scene__lead">{localInstructions[game.id]}</p>
+        <div className="actions">
+          <SoundToggle />
+        </div>
       </header>
 
       {!session ? (
@@ -1058,7 +1516,7 @@ export function LocalMode() {
               items={[
                 { label: 'Players', value: players.length },
                 { label: 'Mode', value: 'Single device' },
-                game.id === 'whowhatwhere'
+                game.id === 'whowhatwhere' || game.id === 'hatgame'
                   ? { label: 'Teams', value: settings.teamCount }
                   : { label: 'Word type', value: getLocalWordType(game.id) }
               ]}
@@ -1073,7 +1531,7 @@ export function LocalMode() {
                 <div className="settings-grid">
                   <label className="settings-field">
                     <span className="helper-text">Teams</span>
-                    <select value={settings.teamCount} onChange={(event) => handleUpdateWhoWhatWhereSetting('teamCount', Number.parseInt(event.target.value, 10))}>
+                    <select value={settings.teamCount} onChange={(event) => handleUpdateTeamSetting('teamCount', Number.parseInt(event.target.value, 10))}>
                       <option value={2}>2 teams</option>
                       <option value={3}>3 teams</option>
                       <option value={4}>4 teams</option>
@@ -1082,7 +1540,7 @@ export function LocalMode() {
 
                   <label className="settings-field">
                     <span className="helper-text">Turn length</span>
-                    <select value={settings.turnDurationSeconds} onChange={(event) => handleUpdateWhoWhatWhereSetting('turnDurationSeconds', Number.parseInt(event.target.value, 10))}>
+                    <select value={settings.turnDurationSeconds} onChange={(event) => handleUpdateTeamSetting('turnDurationSeconds', Number.parseInt(event.target.value, 10))}>
                       <option value={30}>30 seconds</option>
                       <option value={45}>45 seconds</option>
                       <option value={60}>60 seconds</option>
@@ -1092,7 +1550,7 @@ export function LocalMode() {
 
                   <label className="settings-field">
                     <span className="helper-text">Rounds</span>
-                    <select value={settings.totalRounds} onChange={(event) => handleUpdateWhoWhatWhereSetting('totalRounds', Number.parseInt(event.target.value, 10))}>
+                    <select value={settings.totalRounds} onChange={(event) => handleUpdateTeamSetting('totalRounds', Number.parseInt(event.target.value, 10))}>
                       <option value={1}>1 round</option>
                       <option value={2}>2 rounds</option>
                       <option value={3}>3 rounds</option>
@@ -1102,7 +1560,7 @@ export function LocalMode() {
 
                   <label className="settings-field">
                     <span className="helper-text">Free skips</span>
-                    <select value={settings.freeSkips} onChange={(event) => handleUpdateWhoWhatWhereSetting('freeSkips', Number.parseInt(event.target.value, 10))}>
+                    <select value={settings.freeSkips} onChange={(event) => handleUpdateTeamSetting('freeSkips', Number.parseInt(event.target.value, 10))}>
                       <option value={0}>0</option>
                       <option value={1}>1</option>
                       <option value={2}>2</option>
@@ -1112,7 +1570,7 @@ export function LocalMode() {
 
                   <label className="settings-field">
                     <span className="helper-text">Skip penalty</span>
-                    <select value={settings.skipPenalty} onChange={(event) => handleUpdateWhoWhatWhereSetting('skipPenalty', Number.parseInt(event.target.value, 10))}>
+                    <select value={settings.skipPenalty} onChange={(event) => handleUpdateTeamSetting('skipPenalty', Number.parseInt(event.target.value, 10))}>
                       <option value={0}>0 points</option>
                       <option value={1}>1 point</option>
                       <option value={2}>2 points</option>
@@ -1122,10 +1580,70 @@ export function LocalMode() {
               </section>
             )}
 
+            {game.id === 'hatgame' && (
+              <section className="settings-card">
+                <div className="panel-heading">
+                  <h3>Round settings</h3>
+                </div>
+
+                <div className="settings-grid">
+                  <label className="settings-field">
+                    <span className="helper-text">Teams</span>
+                    <select value={settings.teamCount} onChange={(event) => handleUpdateTeamSetting('teamCount', Number.parseInt(event.target.value, 10))}>
+                      <option value={2}>2 teams</option>
+                      <option value={3}>3 teams</option>
+                      <option value={4}>4 teams</option>
+                    </select>
+                  </label>
+
+                  <label className="settings-field">
+                    <span className="helper-text">Turn length</span>
+                    <select value={settings.turnDurationSeconds} onChange={(event) => handleUpdateTeamSetting('turnDurationSeconds', Number.parseInt(event.target.value, 10))}>
+                      <option value={30}>30 seconds</option>
+                      <option value={45}>45 seconds</option>
+                      <option value={60}>60 seconds</option>
+                      <option value={90}>90 seconds</option>
+                      <option value={120}>120 seconds</option>
+                    </select>
+                  </label>
+
+                  <label className="settings-field">
+                    <span className="helper-text">Clues each</span>
+                    <select value={settings.cluesPerPlayer} onChange={(event) => handleUpdateTeamSetting('cluesPerPlayer', Number.parseInt(event.target.value, 10))}>
+                      <option value={3}>3 clues</option>
+                      <option value={4}>4 clues</option>
+                      <option value={5}>5 clues</option>
+                      <option value={6}>6 clues</option>
+                      <option value={7}>7 clues</option>
+                      <option value={8}>8 clues</option>
+                      <option value={9}>9 clues</option>
+                      <option value={10}>10 clues</option>
+                    </select>
+                  </label>
+
+                  <label className="settings-field">
+                    <span className="helper-text">Skips per turn</span>
+                    <select value={settings.skipsPerTurn} onChange={(event) => handleUpdateTeamSetting('skipsPerTurn', Number.parseInt(event.target.value, 10))}>
+                      <option value={0}>0 skips</option>
+                      <option value={1}>1 skip</option>
+                      <option value={2}>2 skips</option>
+                      <option value={3}>3 skips</option>
+                      <option value={4}>4 skips</option>
+                      <option value={5}>5 skips</option>
+                    </select>
+                  </label>
+                </div>
+              </section>
+            )}
+
             {startWarning ? (
               <p className="connection-banner connection-banner--error">{startWarning}</p>
             ) : (
-              <p className="connection-banner">Ready to start once the names and teams look right.</p>
+              <p className="connection-banner">
+                {game.id === 'hatgame'
+                  ? 'Ready to start once the names, teams, and clue packs look right.'
+                  : 'Ready to start once the names and teams look right.'}
+              </p>
             )}
 
             {error && <p className="connection-banner connection-banner--error">{error}</p>}
@@ -1149,6 +1667,17 @@ export function LocalMode() {
             onRemovePlayer={handleRemovePlayer}
             onAutoBalance={() => setPlayers((currentPlayers) => rebalanceWhoWhatWherePlayers(currentPlayers, settings.teamCount))}
           />
+
+          {game.id === 'hatgame' && (
+            <LocalHatGameClueEditor
+              players={players}
+              clueSubmissions={hatClueSubmissions}
+              cluesPerPlayer={settings.cluesPerPlayer}
+              busyAction={busyAction}
+              onChangeClue={handleChangeHatGameClue}
+              onGenerateClues={handleGenerateHatGameClues}
+            />
+          )}
         </div>
       ) : (
         <>
@@ -1169,7 +1698,7 @@ export function LocalMode() {
               session={session}
               applyAction={applyAction}
               busyAction={busyAction}
-              onStartTurn={startWhoWhatWhereTurn}
+              onStartTurn={startTimedTeamTurn}
               onPlayAgain={playAgain}
               onResetSetup={handleResetSetup}
             />
@@ -1180,6 +1709,17 @@ export function LocalMode() {
               session={session}
               applyAction={applyAction}
               busyAction={busyAction}
+              onPlayAgain={playAgain}
+              onResetSetup={handleResetSetup}
+            />
+          )}
+
+          {game.id === 'hatgame' && (
+            <LocalHatGameView
+              session={session}
+              applyAction={applyAction}
+              busyAction={busyAction}
+              onStartTurn={startTimedTeamTurn}
               onPlayAgain={playAgain}
               onResetSetup={handleResetSetup}
             />

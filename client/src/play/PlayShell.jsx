@@ -1,4 +1,5 @@
 import { Link, Outlet, useParams } from 'react-router-dom';
+import { SoundToggle } from '../audio/SoundToggle';
 import { getGameById } from '../games/config';
 import { PlaySessionProvider } from './PlaySessionContext';
 
@@ -29,6 +30,7 @@ export function PlayShell() {
             RVLRY
           </Link>
           <div className="topbar__meta">
+            <SoundToggle compact />
             <span className="topbar__pill">{game.name}</span>
             <span className="topbar__pill topbar__pill--muted">Online flow</span>
           </div>

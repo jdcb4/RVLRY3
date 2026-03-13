@@ -1,13 +1,15 @@
 const GAME_WORD_TYPE = {
   imposter: 'describing',
   whowhatwhere: 'guessing',
-  drawnguess: 'describing'
+  drawnguess: 'describing',
+  hatgame: 'guessing'
 };
 
 const GAME_MIN_PLAYERS = {
   imposter: 2,
   whowhatwhere: 4,
-  drawnguess: 2
+  drawnguess: 2,
+  hatgame: 4
 };
 
 export const DEFAULT_WHOWHATWHERE_SETTINGS = {
@@ -16,6 +18,13 @@ export const DEFAULT_WHOWHATWHERE_SETTINGS = {
   totalRounds: 3,
   freeSkips: 1,
   skipPenalty: 1
+};
+
+export const DEFAULT_HATGAME_SETTINGS = {
+  teamCount: 2,
+  turnDurationSeconds: 45,
+  cluesPerPlayer: 6,
+  skipsPerTurn: 1
 };
 
 const TEAM_LABELS = ['A', 'B', 'C', 'D'];
@@ -32,6 +41,20 @@ export const DEFAULT_WHOWHATWHERE_TEAMS = buildWhoWhatWhereTeams();
 const MAX_CLUE_LENGTH = 120;
 const MAX_GUESS_LENGTH = 100;
 const MAX_DRAWING_DATA_URL_LENGTH = 800_000;
+const HATGAME_PHASES = {
+  1: {
+    name: 'Describe',
+    instruction: 'Use as many words as you want, but do not say any part of the name.'
+  },
+  2: {
+    name: 'One Word',
+    instruction: 'Say exactly one word only. No gestures.'
+  },
+  3: {
+    name: 'Charades',
+    instruction: 'Act it out silently. No words or sounds.'
+  }
+};
 
 const randomItem = (items) => items[Math.floor(Math.random() * items.length)];
 const buildPrivateState = (players, mapper) => new Map(players.map((player) => [player.id, mapper(player)]));
@@ -57,10 +80,18 @@ const sanitizeWhoWhatWhereSettings = (settings = {}) => ({
   skipPenalty: Number.isFinite(settings.skipPenalty) ? settings.skipPenalty : DEFAULT_WHOWHATWHERE_SETTINGS.skipPenalty
 });
 
+const sanitizeHatGameSettings = (settings = {}) => ({
+  teamCount: Number.isFinite(settings.teamCount) ? Math.min(Math.max(settings.teamCount, 2), 4) : DEFAULT_HATGAME_SETTINGS.teamCount,
+  turnDurationSeconds: Number.isFinite(settings.turnDurationSeconds) ? settings.turnDurationSeconds : DEFAULT_HATGAME_SETTINGS.turnDurationSeconds,
+  cluesPerPlayer: Number.isFinite(settings.cluesPerPlayer) ? Math.min(Math.max(settings.cluesPerPlayer, 3), 10) : DEFAULT_HATGAME_SETTINGS.cluesPerPlayer,
+  skipsPerTurn: Number.isFinite(settings.skipsPerTurn) ? Math.min(Math.max(settings.skipsPerTurn, 0), 5) : DEFAULT_HATGAME_SETTINGS.skipsPerTurn
+});
+
 const getTeamMap = (teams = []) => new Map(teams.map((team) => [team.id, team]));
 const getTeamPlayers = (players, teamId) => sortPlayersBySeat(players.filter((player) => player.teamId === teamId));
 const nowIso = () => new Date().toISOString();
 const isPast = (timestamp) => new Date(timestamp).getTime() <= Date.now();
+const getHatGamePhaseMeta = (phaseNumber) => HATGAME_PHASES[phaseNumber] ?? HATGAME_PHASES[1];
 
 const buildImposterPrivateState = (players, publicState, internalState) =>
   buildPrivateState(players, (player) => ({
@@ -226,6 +257,62 @@ const buildDrawNGuessPrivateState = (players, publicState, internalState) => {
   });
 };
 
+const buildHatGameTurnSnapshot = (activeTurn, phaseNumber) => {
+  const currentClue = activeTurn.clueQueue[activeTurn.queueIndex] ?? null;
+
+  return {
+    startedAt: activeTurn.startedAt,
+    endsAt: activeTurn.endsAt,
+    durationSeconds: activeTurn.durationSeconds,
+    phaseNumber,
+    score: activeTurn.score,
+    correctCount: activeTurn.correctCount,
+    skippedCount: activeTurn.skippedCount,
+    skipsRemaining: activeTurn.skipsRemaining,
+    currentClueLength: currentClue?.text?.length ?? 0,
+    skippedCluePending: Boolean(activeTurn.skippedCluePoolIndex !== null),
+    skippedClueLength: activeTurn.skippedClueText?.length ?? 0,
+    clueHistory: activeTurn.clueHistory
+  };
+};
+
+const buildHatGamePrivateState = (players, publicState, internalState, teams) => {
+  const teamMap = getTeamMap(teams);
+  const activeTurn = internalState.activeTurn;
+  const phaseMeta = getHatGamePhaseMeta(internalState.phaseNumber);
+  const currentClue = activeTurn?.clueQueue[activeTurn.queueIndex] ?? null;
+
+  return buildPrivateState(players, (player) => {
+    const playerTeam = teamMap.get(player.teamId) ?? null;
+    const isDescriber = player.id === publicState.activeDescriberId;
+    const isActiveTeam = player.teamId && player.teamId === publicState.activeTeamId;
+    const role = !player.teamId ? 'unassigned' : isDescriber ? 'describer' : isActiveTeam ? 'guesser' : 'spectator';
+
+    return {
+      teamId: player.teamId ?? null,
+      teamName: playerTeam?.name ?? null,
+      role,
+      isActiveTeam,
+      isDescriber,
+      phaseNumber: internalState.phaseNumber,
+      phaseName: phaseMeta.name,
+      phaseInstruction: phaseMeta.instruction,
+      canStartTurn: publicState.stage === 'ready' && isDescriber,
+      canMarkCorrect: publicState.stage === 'turn' && isDescriber,
+      canSkip:
+        publicState.stage === 'turn' &&
+        isDescriber &&
+        (activeTurn?.skipsRemaining ?? 0) > 0 &&
+        activeTurn?.skippedCluePoolIndex === null,
+      canEndTurn: publicState.stage === 'turn' && isDescriber,
+      clue: publicState.stage === 'turn' && isDescriber ? currentClue?.text ?? null : null,
+      skipsRemaining: publicState.stage === 'turn' ? activeTurn?.skipsRemaining ?? 0 : internalState.settings.skipsPerTurn,
+      skippedCluePending: publicState.stage === 'turn' && activeTurn?.skippedCluePoolIndex !== null,
+      skippedClueText: publicState.stage === 'turn' && isDescriber ? activeTurn?.skippedClueText ?? null : null
+    };
+  });
+};
+
 const buildImposterState = ({ players, word }) => {
   const turnOrder = getPlayerIds(players);
   const imposter = randomItem(players);
@@ -321,10 +408,118 @@ const buildDrawNGuessState = ({ players, word }) => {
   };
 };
 
+const buildHatGameReadyPublicState = ({ players, teams, internalState, lastTurnSummary = null }) => {
+  const activeContext = getWhoWhatWhereActiveContext(players, teams, internalState);
+  const phaseMeta = getHatGamePhaseMeta(internalState.phaseNumber);
+
+  return {
+    status: 'round-active',
+    stage: 'ready',
+    roundNumber: internalState.roundNumber,
+    phaseNumber: internalState.phaseNumber,
+    phaseName: phaseMeta.name,
+    phaseInstruction: phaseMeta.instruction,
+    activeTeamId: activeContext.activeTeamId,
+    activeTeamName: activeContext.activeTeam?.name ?? 'Team',
+    activeDescriberId: activeContext.activeDescriberId,
+    activeDescriberName: activeContext.activeDescriberName,
+    turn: null,
+    lastTurnSummary,
+    results: null
+  };
+};
+
+const buildHatGameGameOverPublicState = ({ teams, internalState, lastTurnSummary = null }) => {
+  const leaderboard = cloneTeams(teams)
+    .sort((left, right) => right.score - left.score)
+    .map((team) => ({
+      teamId: team.id,
+      teamName: team.name,
+      score: team.score
+    }));
+  const topScore = leaderboard[0]?.score ?? 0;
+  const winnerTeamIds = leaderboard.filter((team) => team.score === topScore).map((team) => team.teamId);
+
+  return {
+    status: 'game-complete',
+    stage: 'game-over',
+    roundNumber: internalState.roundNumber,
+    phaseNumber: 3,
+    phaseName: getHatGamePhaseMeta(3).name,
+    phaseInstruction: getHatGamePhaseMeta(3).instruction,
+    activeTeamId: null,
+    activeTeamName: null,
+    activeDescriberId: null,
+    activeDescriberName: null,
+    turn: null,
+    lastTurnSummary,
+    results: {
+      leaderboard,
+      winnerTeamIds,
+      isTie: winnerTeamIds.length > 1,
+      totalClues: internalState.cluePool.length
+    }
+  };
+};
+
+const buildHatGameCluePool = (players, lobbyState = {}) =>
+  sortPlayersBySeat(players).flatMap((player) =>
+    (lobbyState.clueSubmissions?.[player.id]?.clues ?? [])
+      .map((clue) => normalizeText(clue))
+      .filter(Boolean)
+      .map((clue) => ({
+        text: clue,
+        submittedBy: player.id,
+        submittedByName: player.name
+      }))
+  );
+
+const collectHatGameClueQueue = (internalState) =>
+  shuffleArray(
+    internalState.cluePool
+      .map((clue, index) => ({
+        ...clue,
+        poolIndex: index
+      }))
+      .filter((clue) => !internalState.usedCluePoolIndices.includes(clue.poolIndex))
+  );
+
+const buildHatGameState = ({ players, teams, settings, lobbyState }) => {
+  const sanitizedSettings = sanitizeHatGameSettings(settings);
+  const nextTeams = cloneTeams(teams).map((team) => ({ ...team, score: 0 }));
+  const teamOrder = nextTeams.map((team) => team.id);
+  const describerIndexes = Object.fromEntries(teamOrder.map((teamId) => [teamId, 0]));
+  const internalState = {
+    settings: sanitizedSettings,
+    teamOrder,
+    teamIndex: 0,
+    roundNumber: 1,
+    phaseNumber: 1,
+    describerIndexes,
+    cluePool: buildHatGameCluePool(players, lobbyState),
+    usedCluePoolIndices: [],
+    activeTurn: null
+  };
+  const publicState = buildHatGameReadyPublicState({
+    players,
+    teams: nextTeams,
+    internalState,
+    lastTurnSummary: null
+  });
+
+  return {
+    publicState,
+    privateState: buildHatGamePrivateState(players, publicState, internalState, nextTeams),
+    internalState,
+    teams: nextTeams
+  };
+};
+
 const GAME_BUILDERS = {
   imposter: buildImposterState,
   whowhatwhere: buildWhoWhatWhereState,
-  drawnguess: buildDrawNGuessState
+  drawnguess: buildDrawNGuessState,
+  hatgame: buildHatGameState
 };
 
 function applyImposterAction({ players, playerId, action, publicState, internalState }) {
@@ -812,10 +1007,292 @@ function advanceDrawNGuessState({ players, publicState, internalState, chain }) 
   };
 }
 
+function finishHatGameTurn({ players, teams, internalState }) {
+  const activeContext = getWhoWhatWhereActiveContext(players, teams, internalState);
+  const activeTurn = internalState.activeTurn;
+
+  if (!activeTurn || !activeContext.activeTeamId) {
+    return { error: 'The turn is not active right now' };
+  }
+
+  const nextTeams = cloneTeams(teams).map((team) =>
+    team.id === activeContext.activeTeamId
+      ? { ...team, score: team.score + activeTurn.score }
+      : team
+  );
+  const nextUsedCluePoolIndices = [
+    ...new Set([
+      ...internalState.usedCluePoolIndices,
+      ...activeTurn.clueHistory
+        .filter((entry) => entry.status === 'correct')
+        .map((entry) => entry.poolIndex)
+        .filter(Number.isFinite)
+    ])
+  ];
+  const phaseCompleted =
+    internalState.cluePool.length > 0 &&
+    nextUsedCluePoolIndices.length >= internalState.cluePool.length;
+  const nextPhaseNumber = phaseCompleted
+    ? Math.min(internalState.phaseNumber + 1, 3)
+    : internalState.phaseNumber;
+  const lastTurnSummary = {
+    teamId: activeContext.activeTeamId,
+    teamName: activeContext.activeTeam?.name ?? 'Team',
+    describerId: activeContext.activeDescriberId,
+    describerName: activeContext.activeDescriberName,
+    scoreDelta: activeTurn.score,
+    correctCount: activeTurn.correctCount,
+    skippedCount: activeTurn.skippedCount,
+    clues: activeTurn.clueHistory,
+    phaseCompleted,
+    completedPhaseNumber: phaseCompleted ? internalState.phaseNumber : null,
+    nextPhaseNumber:
+      phaseCompleted && internalState.phaseNumber < 3 ? nextPhaseNumber : null,
+    nextPhaseName:
+      phaseCompleted && internalState.phaseNumber < 3
+        ? getHatGamePhaseMeta(nextPhaseNumber).name
+        : null
+  };
+
+  const currentTeamPlayers = activeContext.activeTeamPlayers;
+  const currentDescriberIndex = internalState.describerIndexes[activeContext.activeTeamId] ?? 0;
+  const nextDescriberIndexes = {
+    ...internalState.describerIndexes,
+    [activeContext.activeTeamId]:
+      currentTeamPlayers.length === 0 ? 0 : (currentDescriberIndex + 1) % currentTeamPlayers.length
+  };
+
+  let nextTeamIndex = internalState.teamIndex + 1;
+  let nextRoundNumber = internalState.roundNumber;
+
+  if (nextTeamIndex >= internalState.teamOrder.length) {
+    nextTeamIndex = 0;
+    nextRoundNumber += 1;
+  }
+
+  const nextInternalState = {
+    ...internalState,
+    describerIndexes: nextDescriberIndexes,
+    teamIndex: nextTeamIndex,
+    roundNumber: nextRoundNumber,
+    phaseNumber: nextPhaseNumber,
+    usedCluePoolIndices: phaseCompleted ? [] : nextUsedCluePoolIndices,
+    activeTurn: null
+  };
+
+  if (phaseCompleted && internalState.phaseNumber >= 3) {
+    const nextPublicState = buildHatGameGameOverPublicState({
+      teams: nextTeams,
+      internalState: nextInternalState,
+      lastTurnSummary
+    });
+
+    return {
+      publicState: nextPublicState,
+      privateState: buildHatGamePrivateState(players, nextPublicState, nextInternalState, nextTeams),
+      internalState: nextInternalState,
+      teams: nextTeams
+    };
+  }
+
+  const nextPublicState = buildHatGameReadyPublicState({
+    players,
+    teams: nextTeams,
+    internalState: nextInternalState,
+    lastTurnSummary
+  });
+
+  return {
+    publicState: nextPublicState,
+    privateState: buildHatGamePrivateState(players, nextPublicState, nextInternalState, nextTeams),
+    internalState: nextInternalState,
+    teams: nextTeams
+  };
+}
+
+function applyHatGameAction({ players, teams, playerId, action, publicState, internalState }) {
+  const safeTeams = cloneTeams(teams);
+
+  if (action.type === 'start-turn') {
+    const activeContext = getWhoWhatWhereActiveContext(players, safeTeams, internalState);
+
+    if (publicState.stage !== 'ready') {
+      return { error: 'The room is already in a live turn' };
+    }
+
+    if (playerId !== activeContext.activeDescriberId) {
+      return { error: 'Only the active describer can start this turn' };
+    }
+
+    const clueQueue = collectHatGameClueQueue(internalState);
+    if (clueQueue.length === 0) {
+      return { error: 'No clues are available for this turn right now' };
+    }
+
+    const startedAt = Date.now();
+    const activeTurn = {
+      startedAt: new Date(startedAt).toISOString(),
+      endsAt: new Date(startedAt + internalState.settings.turnDurationSeconds * 1000).toISOString(),
+      durationSeconds: internalState.settings.turnDurationSeconds,
+      clueQueue,
+      queueIndex: 0,
+      score: 0,
+      correctCount: 0,
+      skippedCount: 0,
+      skipsRemaining: internalState.settings.skipsPerTurn,
+      skippedCluePoolIndex: null,
+      skippedClueText: null,
+      clueHistory: []
+    };
+    const nextInternalState = {
+      ...internalState,
+      activeTurn
+    };
+    const nextPublicState = {
+      ...publicState,
+      stage: 'turn',
+      turn: buildHatGameTurnSnapshot(activeTurn, internalState.phaseNumber)
+    };
+
+    return {
+      publicState: nextPublicState,
+      privateState: buildHatGamePrivateState(players, nextPublicState, nextInternalState, safeTeams),
+      internalState: nextInternalState,
+      teams: safeTeams
+    };
+  }
+
+  if (action.type === 'end-turn') {
+    const activeContext = getWhoWhatWhereActiveContext(players, safeTeams, internalState);
+    const activeTurn = internalState.activeTurn;
+
+    if (publicState.stage !== 'turn' || !activeTurn) {
+      return { error: 'There is no active turn to end' };
+    }
+
+    const isExpired = isPast(activeTurn.endsAt);
+    if (playerId !== activeContext.activeDescriberId && !isExpired) {
+      return { error: 'Only the active describer can end the turn early' };
+    }
+
+    return finishHatGameTurn({
+      players,
+      teams: safeTeams,
+      internalState
+    });
+  }
+
+  if (!['mark-correct', 'skip-clue'].includes(action.type)) {
+    return { error: 'Unknown action for HatGame' };
+  }
+
+  if (publicState.stage !== 'turn' || !internalState.activeTurn) {
+    return { error: 'The round is not in an active turn' };
+  }
+
+  const activeContext = getWhoWhatWhereActiveContext(players, safeTeams, internalState);
+  if (playerId !== activeContext.activeDescriberId) {
+    return { error: 'Only the active describer can control the turn' };
+  }
+
+  if (isPast(internalState.activeTurn.endsAt)) {
+    return finishHatGameTurn({
+      players,
+      teams: safeTeams,
+      internalState
+    });
+  }
+
+  const currentClue = internalState.activeTurn.clueQueue[internalState.activeTurn.queueIndex];
+  if (!currentClue) {
+    return finishHatGameTurn({
+      players,
+      teams: safeTeams,
+      internalState
+    });
+  }
+
+  const nextActiveTurn = {
+    ...internalState.activeTurn,
+    clueQueue: [...internalState.activeTurn.clueQueue],
+    clueHistory: [...internalState.activeTurn.clueHistory]
+  };
+
+  if (action.type === 'mark-correct') {
+    nextActiveTurn.score += 1;
+    nextActiveTurn.correctCount += 1;
+    nextActiveTurn.clueHistory.push({
+      clue: currentClue.text,
+      status: 'correct',
+      timestamp: nowIso(),
+      poolIndex: currentClue.poolIndex
+    });
+
+    if (nextActiveTurn.skippedCluePoolIndex === currentClue.poolIndex) {
+      nextActiveTurn.skippedCluePoolIndex = null;
+      nextActiveTurn.skippedClueText = null;
+    }
+
+    nextActiveTurn.queueIndex += 1;
+  }
+
+  if (action.type === 'skip-clue') {
+    if (nextActiveTurn.skippedCluePoolIndex !== null) {
+      return { error: 'Answer the skipped clue before skipping again' };
+    }
+
+    if (nextActiveTurn.skipsRemaining <= 0) {
+      return { error: 'No skips remain this turn' };
+    }
+
+    nextActiveTurn.skippedCount += 1;
+    nextActiveTurn.skipsRemaining -= 1;
+    nextActiveTurn.skippedCluePoolIndex = currentClue.poolIndex;
+    nextActiveTurn.skippedClueText = currentClue.text;
+    nextActiveTurn.clueHistory.push({
+      clue: currentClue.text,
+      status: 'skipped',
+      timestamp: nowIso(),
+      poolIndex: currentClue.poolIndex
+    });
+
+    const [skippedClue] = nextActiveTurn.clueQueue.splice(nextActiveTurn.queueIndex, 1);
+    nextActiveTurn.clueQueue.push(skippedClue);
+  }
+
+  if (!nextActiveTurn.clueQueue[nextActiveTurn.queueIndex]) {
+    return finishHatGameTurn({
+      players,
+      teams: safeTeams,
+      internalState: {
+        ...internalState,
+        activeTurn: nextActiveTurn
+      }
+    });
+  }
+
+  const nextInternalState = {
+    ...internalState,
+    activeTurn: nextActiveTurn
+  };
+  const nextPublicState = {
+    ...publicState,
+    turn: buildHatGameTurnSnapshot(nextActiveTurn, internalState.phaseNumber)
+  };
+
+  return {
+    publicState: nextPublicState,
+    privateState: buildHatGamePrivateState(players, nextPublicState, nextInternalState, safeTeams),
+    internalState: nextInternalState,
+    teams: safeTeams
+  };
+}
+
 const GAME_ACTION_HANDLERS = {
   imposter: applyImposterAction,
   whowhatwhere: applyWhoWhatWhereAction,
-  drawnguess: applyDrawNGuessAction
+  drawnguess: applyDrawNGuessAction,
+  hatgame: applyHatGameAction
 };
 
 export function getWordTypeForGame(gameId) {
@@ -826,7 +1303,7 @@ export function getMinPlayersForGame(gameId) {
   return GAME_MIN_PLAYERS[gameId] ?? 2;
 }
 
-export function buildGameStartState({ gameId, players, word, teams = [], settings = {}, wordStore }) {
+export function buildGameStartState({ gameId, players, word, teams = [], settings = {}, lobbyState = {}, wordStore }) {
   const builder = GAME_BUILDERS[gameId];
   if (!builder) {
     return {
@@ -836,7 +1313,7 @@ export function buildGameStartState({ gameId, players, word, teams = [], setting
     };
   }
 
-  return builder({ players, word, teams, settings, wordStore });
+  return builder({ players, word, teams, settings, lobbyState, wordStore });
 }
 
 export function applyGameAction({
