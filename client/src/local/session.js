@@ -33,12 +33,18 @@ export const DEFAULT_LOCAL_PLAYER_COUNT = {
   hatgame: 4
 };
 
+export const LOCAL_MIN_PLAYERS_BY_GAME = {
+  imposter: 3,
+  whowhatwhere: 4,
+  drawnguess: 2,
+  hatgame: 4
+};
+
 export const DEFAULT_LOCAL_WHOWHATWHERE_SETTINGS = {
   teamCount: 2,
   turnDurationSeconds: 45,
   totalRounds: 2,
-  freeSkips: 1,
-  skipPenalty: 1
+  skipLimit: 1
 };
 
 export const DEFAULT_LOCAL_HATGAME_SETTINGS = {
@@ -46,6 +52,15 @@ export const DEFAULT_LOCAL_HATGAME_SETTINGS = {
   turnDurationSeconds: 45,
   cluesPerPlayer: 6,
   skipsPerTurn: 1
+};
+
+export const DEFAULT_LOCAL_IMPOSTER_SETTINGS = {
+  rounds: 2,
+  imposterCount: 1
+};
+
+export const DEFAULT_LOCAL_DRAWNGUESS_SETTINGS = {
+  roundDurationSeconds: 45
 };
 
 const clampInteger = (value, minimum, maximum, fallback) => {
@@ -111,9 +126,11 @@ export function getLocalStartError({
 }) {
   const normalizedPlayers = sortPlayersBySeat(players).map(normalizeLocalPlayer);
   const minimumPlayers =
-    gameId === 'whowhatwhere' || gameId === 'hatgame'
-      ? Math.max(4, settings.teamCount * 2)
-      : 2;
+    gameId === 'imposter'
+      ? Math.max(LOCAL_MIN_PLAYERS_BY_GAME.imposter, (settings.imposterCount ?? 1) + 2)
+      : gameId === 'whowhatwhere' || gameId === 'hatgame'
+      ? Math.max(LOCAL_MIN_PLAYERS_BY_GAME[gameId] ?? 4, settings.teamCount * 2)
+      : LOCAL_MIN_PLAYERS_BY_GAME[gameId] ?? MIN_LOCAL_PLAYERS;
 
   if (normalizedPlayers.length < minimumPlayers) {
     return `Need at least ${minimumPlayers} players`;
@@ -125,19 +142,6 @@ export function getLocalStartError({
       const rosterSize = normalizedPlayers.filter((player) => player.teamId === team.id).length;
       if (rosterSize < 2) {
         return 'Each team needs at least 2 players';
-      }
-    }
-  }
-
-  if (gameId === 'hatgame') {
-    const requiredClues = settings.cluesPerPlayer ?? DEFAULT_LOCAL_HATGAME_SETTINGS.cluesPerPlayer;
-    const clueSubmissions = lobbyState.clueSubmissions ?? {};
-    for (const player of normalizedPlayers) {
-      const submittedClues = clueSubmissions[player.id]?.clues ?? [];
-      const validClueCount = submittedClues.map((clue) => sanitizeText(clue)).filter(Boolean).length;
-
-      if (validClueCount !== requiredClues) {
-        return `Each player needs ${requiredClues} saved clues`;
       }
     }
   }
@@ -164,18 +168,16 @@ const sanitizeWhoWhatWhereSettings = (settings = {}) => ({
     8,
     DEFAULT_LOCAL_WHOWHATWHERE_SETTINGS.totalRounds
   ),
-  freeSkips: clampInteger(
-    settings.freeSkips,
-    0,
-    4,
-    DEFAULT_LOCAL_WHOWHATWHERE_SETTINGS.freeSkips
-  ),
-  skipPenalty: clampInteger(
-    settings.skipPenalty,
-    0,
-    3,
-    DEFAULT_LOCAL_WHOWHATWHERE_SETTINGS.skipPenalty
-  )
+  skipLimit:
+    String(settings.skipLimit ?? DEFAULT_LOCAL_WHOWHATWHERE_SETTINGS.skipLimit).toLowerCase() ===
+    'unlimited'
+      ? -1
+      : clampInteger(
+          settings.skipLimit,
+          1,
+          3,
+          DEFAULT_LOCAL_WHOWHATWHERE_SETTINGS.skipLimit
+        )
 });
 
 const sanitizeHatGameSettings = (settings = {}) => ({
@@ -200,21 +202,54 @@ const sanitizeHatGameSettings = (settings = {}) => ({
   )
 });
 
-function buildImposterSession({ players, prompt, rng = Math.random }) {
+const sanitizeImposterSettings = (settings = {}) => ({
+  rounds: clampInteger(settings.rounds, 1, 4, DEFAULT_LOCAL_IMPOSTER_SETTINGS.rounds),
+  imposterCount: clampInteger(
+    settings.imposterCount,
+    1,
+    3,
+    DEFAULT_LOCAL_IMPOSTER_SETTINGS.imposterCount
+  )
+});
+
+const sanitizeDrawNGuessSettings = (settings = {}) => ({
+  roundDurationSeconds: clampInteger(
+    settings.roundDurationSeconds,
+    30,
+    60,
+    DEFAULT_LOCAL_DRAWNGUESS_SETTINGS.roundDurationSeconds
+  )
+});
+
+function buildImposterSession({
+  players,
+  prompt,
+  settings = DEFAULT_LOCAL_IMPOSTER_SETTINGS,
+  rng = Math.random
+}) {
   const orderedPlayers = sortPlayersBySeat(players).map(normalizeLocalPlayer);
-  const imposterIndex = Math.floor(rng() * orderedPlayers.length);
-  const imposterId = orderedPlayers[imposterIndex]?.id ?? orderedPlayers[0]?.id ?? null;
+  const normalizedSettings = sanitizeImposterSettings(settings);
+  const shuffledPlayers = [...orderedPlayers]
+    .map((player) => ({ player, sortKey: rng() }))
+    .sort((left, right) => left.sortKey - right.sortKey)
+    .map((entry) => entry.player);
+  const imposterIds = shuffledPlayers
+    .slice(0, Math.min(normalizedSettings.imposterCount, Math.max(orderedPlayers.length - 1, 1)))
+    .map((player) => player.id);
 
   return {
     gameId: 'imposter',
     players: orderedPlayers,
+    settings: normalizedSettings,
     prompt,
     stage: 'reveal',
-    imposterId,
+    imposterIds,
     revealIndex: 0,
+    clueRound: 1,
     clueIndex: 0,
     votingIndex: 0,
-    clues: [],
+    discussionReady: false,
+    clueTurns: [],
     votes: {},
     results: null
   };
@@ -227,6 +262,7 @@ function buildWhoWhatWhereSession({ players, settings = DEFAULT_LOCAL_WHOWHATWHE
   return {
     gameId: 'whowhatwhere',
     players: orderedPlayers,
+    wordReserves: {},
     ...createWhoWhatWhereGame({
       players: orderedPlayers,
       teams: buildLocalTeams(normalizedSettings.teamCount),
@@ -256,15 +292,22 @@ function buildHatGameSession({
   };
 }
 
-function buildDrawNGuessSession({ players, prompt }) {
+function buildDrawNGuessSession({
+  players,
+  prompt,
+  settings = DEFAULT_LOCAL_DRAWNGUESS_SETTINGS
+}) {
   const orderedPlayers = sortPlayersBySeat(players).map(normalizeLocalPlayer);
+  const normalizedSettings = sanitizeDrawNGuessSettings(settings);
 
   return {
     gameId: 'drawnguess',
     players: orderedPlayers,
+    settings: normalizedSettings,
     ...createDrawNGuessGame({
       players: orderedPlayers,
-      prompt
+      prompt,
+      settings: normalizedSettings
     })
   };
 }
@@ -278,7 +321,7 @@ export function buildLocalSession({
   rng = Math.random
 }) {
   if (gameId === 'imposter') {
-    return buildImposterSession({ players, prompt, rng });
+    return buildImposterSession({ players, prompt, settings, rng });
   }
 
   if (gameId === 'whowhatwhere') {
@@ -286,7 +329,7 @@ export function buildLocalSession({
   }
 
   if (gameId === 'drawnguess') {
-    return buildDrawNGuessSession({ players, prompt });
+    return buildDrawNGuessSession({ players, prompt, settings });
   }
 
   if (gameId === 'hatgame') {
@@ -313,8 +356,8 @@ export const getActiveImposterPlayer = (session) => {
 };
 
 export const getImposterSecretForPlayer = (session, playerId) => ({
-  role: playerId === session.imposterId ? 'imposter' : 'crew',
-  word: playerId === session.imposterId ? null : session.prompt
+  role: session.imposterIds.includes(playerId) ? 'imposter' : 'crew',
+  word: session.imposterIds.includes(playerId) ? null : session.prompt
 });
 
 const buildImposterResults = (session, votes) => {
@@ -323,35 +366,45 @@ const buildImposterResults = (session, votes) => {
     return counts;
   }, {});
 
-  for (const targetId of Object.values(votes)) {
-    voteCounts[targetId] += 1;
+  for (const selections of Object.values(votes)) {
+    for (const targetId of selections) {
+      voteCounts[targetId] += 1;
+    }
   }
 
   const highestVoteCount = Math.max(...Object.values(voteCounts));
   const leadingPlayers = Object.entries(voteCounts)
     .filter(([, count]) => count === highestVoteCount)
     .map(([playerId]) => playerId);
-  const accusedPlayerId = leadingPlayers.length === 1 ? leadingPlayers[0] : null;
-  const crewWon = accusedPlayerId === session.imposterId;
+  const accusedPlayerIds = leadingPlayers.slice(
+    0,
+    Math.min(session.settings.imposterCount, leadingPlayers.length)
+  );
+  const imposterIds = session.imposterIds ?? [];
+  const crewWon =
+    accusedPlayerIds.length === imposterIds.length &&
+    accusedPlayerIds.every((playerId) => imposterIds.includes(playerId));
 
   return {
     outcome: crewWon ? 'crew' : 'imposter',
     reason:
-      accusedPlayerId === null
-        ? 'The room tied its vote, so the imposter slipped away.'
+      accusedPlayerIds.length !== imposterIds.length
+        ? 'The room split its vote, so the imposters slipped away.'
         : crewWon
-          ? 'The room found the imposter.'
+          ? 'The room found every imposter.'
           : 'The room accused the wrong player.',
-    imposterId: session.imposterId,
+    imposterIds,
+    imposterId: imposterIds[0] ?? null,
     secretWord: session.prompt,
-    accusedPlayerId,
+    accusedPlayerId: accusedPlayerIds[0] ?? null,
+    accusedPlayerIds,
     voteTally: session.players.map((player) => ({
       playerId: player.id,
       votes: voteCounts[player.id] ?? 0
     })),
-    votes: Object.entries(votes).map(([voterId, targetPlayerId]) => ({
+    votes: Object.entries(votes).map(([voterId, targetPlayerIds]) => ({
       voterId,
-      targetPlayerId
+      targetPlayerIds
     }))
   };
 };
@@ -377,37 +430,52 @@ function applyLocalImposterAction(session, action) {
     };
   }
 
-  if (action.type === 'submit-clue') {
+  if (action.type === 'advance-clue-turn') {
     if (session.stage !== 'clues') {
-      return { error: 'Clues are not active right now' };
-    }
-
-    const clue = sanitizeText(action.payload?.text);
-    if (!clue) {
-      return { error: 'Enter a clue before continuing' };
-    }
-
-    if (clue.length > MAX_LOCAL_CLUE_LENGTH) {
-      return { error: `Clues must be ${MAX_LOCAL_CLUE_LENGTH} characters or fewer` };
+      return { error: 'Clue turns are not active right now' };
     }
 
     const activePlayer = session.players[session.clueIndex];
-    const clues = [...session.clues, { playerId: activePlayer.id, text: clue }];
+    const clueTurns = [
+      ...session.clueTurns,
+      { playerId: activePlayer.id, roundNumber: session.clueRound }
+    ];
     const nextClueIndex = session.clueIndex + 1;
 
     if (nextClueIndex >= session.players.length) {
+      if (session.clueRound >= session.settings.rounds) {
+        return {
+          ...session,
+          stage: 'discussion',
+          clueTurns,
+          discussionReady: false
+        };
+      }
+
       return {
         ...session,
-        stage: 'voting',
-        clues,
-        votingIndex: 0
+        clueTurns,
+        clueRound: session.clueRound + 1,
+        clueIndex: 0
       };
     }
 
     return {
       ...session,
-      clues,
+      clueTurns,
       clueIndex: nextClueIndex
+    };
+  }
+
+  if (action.type === 'start-voting') {
+    if (session.stage !== 'discussion') {
+      return { error: 'Discussion is not active right now' };
+    }
+
+    return {
+      ...session,
+      stage: 'voting',
+      votingIndex: 0
     };
   }
 
@@ -417,18 +485,31 @@ function applyLocalImposterAction(session, action) {
     }
 
     const activePlayer = session.players[session.votingIndex];
-    const targetPlayerId = action.payload?.targetPlayerId;
-    if (!session.players.some((player) => player.id === targetPlayerId)) {
-      return { error: 'Choose a valid player to accuse' };
+    const rawSelections = Array.isArray(action.payload?.targetPlayerIds)
+      ? action.payload.targetPlayerIds
+      : [action.payload?.targetPlayerId].filter(Boolean);
+    const targetPlayerIds = [...new Set(rawSelections)];
+    const expectedVotes = Math.min(session.settings.imposterCount, session.players.length - 1);
+
+    if (targetPlayerIds.length !== expectedVotes) {
+      return { error: `Choose ${expectedVotes} player${expectedVotes === 1 ? '' : 's'} to accuse` };
     }
 
-    if (targetPlayerId === activePlayer.id) {
+    if (
+      targetPlayerIds.some(
+        (targetPlayerId) => !session.players.some((player) => player.id === targetPlayerId)
+      )
+    ) {
+      return { error: 'Choose valid players to accuse' };
+    }
+
+    if (targetPlayerIds.includes(activePlayer.id)) {
       return { error: 'Players cannot vote for themselves' };
     }
 
     const votes = {
       ...session.votes,
-      [activePlayer.id]: targetPlayerId
+      [activePlayer.id]: targetPlayerIds
     };
     const nextVotingIndex = session.votingIndex + 1;
 
@@ -456,12 +537,41 @@ export function getWhoWhatWhereContext(session) {
 }
 
 function applyLocalWhoWhatWhereAction(session, action) {
+  const nextWordReserves = {
+    ...(session.wordReserves ?? {})
+  };
+  const actionPayload =
+    action.type === 'start-turn'
+      ? {
+          ...action.payload,
+          words: action.payload?.words ?? [],
+          reserveWords: undefined
+        }
+      : action.payload;
+
+  if (action.type === 'start-turn' && Array.isArray(action.payload?.reserveWords)) {
+    nextWordReserves[action.payload.category] = [...action.payload.reserveWords];
+  }
+
   const result = applyCoreWhoWhatWhereAction(session, {
     players: session.players,
-    action
+    action: {
+      ...action,
+      payload: actionPayload
+    },
+    buildMoreWords: (category) => {
+      const reserve = nextWordReserves[category] ?? [];
+      if (reserve.length === 0) {
+        return [];
+      }
+
+      const nextWords = reserve.splice(0, 30);
+      nextWordReserves[category] = reserve;
+      return nextWords;
+    }
   });
 
-  return result?.error ? result : { ...session, ...result };
+  return result?.error ? result : { ...session, ...result, wordReserves: nextWordReserves };
 }
 
 function applyLocalHatGameAction(session, action) {

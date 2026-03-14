@@ -47,6 +47,15 @@ export const buildHatGameCluePool = (players, clueSubmissions = {}) =>
       }))
   );
 
+export const isHatGameShowingSkippedClue = (activeTurn) => {
+  if (!activeTurn || activeTurn.skippedCluePoolIndex === null) {
+    return false;
+  }
+
+  const currentClue = activeTurn.clueQueue[activeTurn.queueIndex] ?? null;
+  return currentClue?.poolIndex === activeTurn.skippedCluePoolIndex;
+};
+
 export const createHatGame = ({ teams, settings, cluePool }) => {
   const nextTeams = cloneTeams(teams).map((team) => ({ ...team, score: 0 }));
   const teamOrder = nextTeams.map((team) => team.id);

@@ -34,19 +34,53 @@ const sanitizeWhoWhatWhereSettings = (settings = {}) => ({
     8,
     DEFAULT_WHOWHATWHERE_SETTINGS.totalRounds
   ),
-  freeSkips: clampInteger(
-    settings.freeSkips,
-    0,
-    4,
-    DEFAULT_WHOWHATWHERE_SETTINGS.freeSkips
-  ),
-  skipPenalty: clampInteger(
-    settings.skipPenalty,
-    0,
-    3,
-    DEFAULT_WHOWHATWHERE_SETTINGS.skipPenalty
-  )
+  skipLimit:
+    String(settings.skipLimit ?? DEFAULT_WHOWHATWHERE_SETTINGS.skipLimit).toLowerCase() ===
+    'unlimited'
+      ? -1
+      : clampInteger(
+          settings.skipLimit,
+          1,
+          3,
+          DEFAULT_WHOWHATWHERE_SETTINGS.skipLimit
+        )
 });
+
+const sanitizeImposterSettings = (settings = {}) => ({
+  rounds: clampInteger(settings.rounds, 1, 4, 2),
+  imposterCount: clampInteger(settings.imposterCount, 1, 3, 1)
+});
+
+const sanitizeDrawNGuessSettings = (settings = {}) => ({
+  roundDurationSeconds: clampInteger(settings.roundDurationSeconds, 30, 60, 45)
+});
+
+const validateImposterStart = (room, minimumPlayers) => {
+  const imposterCount = room.settings?.imposterCount ?? 1;
+  if (room.players.length < Math.max(minimumPlayers, imposterCount + 2)) {
+    return `Need at least ${Math.max(minimumPlayers, imposterCount + 2)} players`;
+  }
+
+  return null;
+};
+
+const validateImposterReady = ({ room, ready }) => {
+  if (!ready) {
+    return null;
+  }
+
+  return validateImposterStart(room, 3);
+};
+
+const validateDrawNGuessReady = () => null;
+
+const validateDrawNGuessStart = (room, minimumPlayers) => {
+  if (room.players.length < minimumPlayers) {
+    return `Need at least ${minimumPlayers} players`;
+  }
+
+  return null;
+};
 
 const sanitizeHatGameSettings = (settings = {}) => ({
   teamCount: clampInteger(settings.teamCount, 2, 4, DEFAULT_HATGAME_SETTINGS.teamCount),
@@ -210,11 +244,19 @@ const TEAM_ROOM_GAME = {
 const ROOM_GAME_REGISTRY = {
   imposter: {
     ...BASE_ROOM_GAME,
-    needsStartWord: true
+    needsStartWord: true,
+    getDefaultSettings: () => sanitizeImposterSettings(),
+    sanitizeSettings: sanitizeImposterSettings,
+    validateReady: validateImposterReady,
+    validateStart: (room) => validateImposterStart(room, 3)
   },
   drawnguess: {
     ...BASE_ROOM_GAME,
-    needsStartWord: true
+    needsStartWord: true,
+    getDefaultSettings: () => sanitizeDrawNGuessSettings(),
+    sanitizeSettings: sanitizeDrawNGuessSettings,
+    validateReady: validateDrawNGuessReady,
+    validateStart: (room) => validateDrawNGuessStart(room, 2)
   },
   whowhatwhere: {
     ...TEAM_ROOM_GAME,

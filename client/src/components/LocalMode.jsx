@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import { useAudioCues } from '../audio/AudioCueContext';
 import { SoundToggle } from '../audio/SoundToggle';
 import { SummaryChips } from '../components/gameplay/SharedGameUi';
@@ -23,14 +23,17 @@ import {
 import { LOCAL_SETTINGS_COMPONENTS, LOCAL_VIEW_COMPONENTS } from './local';
 import {
   LocalHatGameClueEditor,
+  HandoffPanel,
   LocalPlayersEditor,
 } from './local/common';
 import {
   EMPTY_TEAMS,
   buildEmptyHatGameClues,
   createLocalPlayerId,
+  getNextLocalPlayerName,
   getInitialPlayers,
   getInitialSettingsForGame,
+  rotateLocalRoundPlayers,
   syncHatGameClueSubmissions
 } from './local/helpers';
 
@@ -53,6 +56,7 @@ export function LocalMode() {
     )
   );
   const [session, setSession] = useState(null);
+  const [hatClueEntry, setHatClueEntry] = useState(null);
   const [busyAction, setBusyAction] = useState('');
   const [error, setError] = useState('');
   const [playersPanelOpen, setPlayersPanelOpen] = useState(true);
@@ -73,6 +77,7 @@ export function LocalMode() {
       )
     );
     setSession(null);
+    setHatClueEntry(null);
     setBusyAction('');
     setError('');
     setPlayersPanelOpen(true);
@@ -114,15 +119,6 @@ export function LocalMode() {
   const SettingsCard = LOCAL_SETTINGS_COMPONENTS[gameModule.localSettingsVariant] ?? null;
   const ActiveLocalView =
     LOCAL_VIEW_COMPONENTS[gameModule.localVariant] ?? LOCAL_VIEW_COMPONENTS.imposter;
-  const readyCluePacks = useMemo(
-    () =>
-      Object.values(hatClueSubmissions).filter(
-        (submission) =>
-          submission?.clues?.every((clue) => clue.trim().length > 0)
-      ).length,
-    [hatClueSubmissions]
-  );
-
   const replacePlayers = useCallback((updater) => {
     setPlayers((currentPlayers) =>
       updater(currentPlayers).map((player, index) => ({
@@ -149,7 +145,7 @@ export function LocalMode() {
     });
   }, []);
 
-  const buildSession = useCallback(async () => {
+  const buildSession = useCallback(async (sessionPlayers = players) => {
     const prompt =
       gameId === 'whowhatwhere' || gameId === 'hatgame'
         ? ''
@@ -157,7 +153,7 @@ export function LocalMode() {
 
     return buildLocalSession({
       gameId,
-      players,
+      players: sessionPlayers,
       prompt,
       settings,
       lobbyState: { clueSubmissions: hatClueSubmissions }
@@ -167,6 +163,12 @@ export function LocalMode() {
   const startSession = useCallback(async () => {
     if (startHint) {
       setError(startHint);
+      return;
+    }
+
+    if (gameId === 'hatgame') {
+      setError('');
+      setHatClueEntry({ playerIndex: 0, isRevealed: false });
       return;
     }
 
@@ -184,14 +186,18 @@ export function LocalMode() {
     } finally {
       setBusyAction('');
     }
-  }, [buildSession, startHint]);
+  }, [buildSession, gameId, startHint]);
 
   const playAgain = useCallback(async () => {
     setBusyAction('restart');
     setError('');
 
     try {
-      setSession(await buildSession());
+      const nextPlayers =
+        gameId === 'drawnguess' && session?.players?.length
+          ? rotateLocalRoundPlayers(session.players)
+          : players;
+      setSession(await buildSession(nextPlayers));
     } catch (sessionError) {
       setError(
         sessionError instanceof Error
@@ -201,7 +207,7 @@ export function LocalMode() {
     } finally {
       setBusyAction('');
     }
-  }, [buildSession]);
+  }, [buildSession, gameId, players, session?.players]);
 
   const startTimedTeamTurn = useCallback(async () => {
     setBusyAction('start-turn');
@@ -210,7 +216,11 @@ export function LocalMode() {
     try {
       const payload =
         gameId === 'whowhatwhere'
-          ? await fetchWordDeck({ type: 'guessing', count: 30 })
+          ? await fetchWordDeck({ type: 'guessing', count: 90 }).then((deck) => ({
+              category: deck.category,
+              words: deck.words.slice(0, 30),
+              reserveWords: deck.words.slice(30)
+            }))
           : {};
 
       setSession((currentSession) => {
@@ -271,7 +281,7 @@ export function LocalMode() {
       {
         id: createLocalPlayerId(),
         seat: currentPlayers.length,
-        name: `Player ${currentPlayers.length + 1}`,
+        name: getNextLocalPlayerName(currentPlayers),
         teamId:
           teams.length > 0 ? teams[currentPlayers.length % teams.length]?.id ?? null : null
       }
@@ -321,9 +331,11 @@ export function LocalMode() {
             clues: Array.from(
               { length: settings.cluesPerPlayer },
               (_, index) =>
-                suggestions[index] ??
-                currentSubmissions[playerId]?.clues?.[index] ??
-                ''
+                currentSubmissions[playerId]?.clues?.[index]?.trim().length > 0
+                  ? currentSubmissions[playerId].clues[index]
+                  : suggestions[index] ??
+                    currentSubmissions[playerId]?.clues?.[index] ??
+                    ''
             )
           }
         }));
@@ -343,9 +355,49 @@ export function LocalMode() {
 
   const handleResetSetup = () => {
     setSession(null);
+    setHatClueEntry(null);
     setBusyAction('');
     setError('');
   };
+
+  const handleConfirmHatGameClues = useCallback(async () => {
+    if (!hatClueEntry) {
+      return;
+    }
+
+    const activePlayer = players[hatClueEntry.playerIndex];
+    const clues = hatClueSubmissions[activePlayer.id]?.clues ?? buildEmptyHatGameClues(settings.cluesPerPlayer);
+    const normalizedClues = clues.map((clue) => clue.trim());
+
+    if (normalizedClues.some((clue) => clue.length === 0)) {
+      setError(`Fill in every clue before handing the phone on to ${activePlayer.name}.`);
+      return;
+    }
+
+    setError('');
+
+    if (hatClueEntry.playerIndex >= players.length - 1) {
+      setBusyAction('start-session');
+      try {
+        setSession(await buildSession());
+        setHatClueEntry(null);
+      } catch (sessionError) {
+        setError(
+          sessionError instanceof Error
+            ? sessionError.message
+            : 'Unable to start local session'
+        );
+      } finally {
+        setBusyAction('');
+      }
+      return;
+    }
+
+    setHatClueEntry({
+      playerIndex: hatClueEntry.playerIndex + 1,
+      isRevealed: false
+    });
+  }, [buildSession, hatClueEntry, hatClueSubmissions, players, settings.cluesPerPlayer]);
 
   if (!game?.supportsLocal) {
     return (
@@ -364,9 +416,21 @@ export function LocalMode() {
     <main className="scene scene--local">
       <header className="scene__header scene__header--compact">
         <div className="scene__header-row scene__header-row--between">
-          <Link aria-label="Back to RVLRY hub" className="scene__back scene__back--icon" to="/">
+          <button
+            type="button"
+            aria-label={session || hatClueEntry ? 'Back to pass-and-play setup' : 'Back to game setup'}
+            className="scene__back scene__back--icon"
+            onClick={() => {
+              if (session || hatClueEntry) {
+                handleResetSetup();
+                return;
+              }
+
+              navigate(`/play/${gameId}`);
+            }}
+          >
             <ArrowLeftIcon />
-          </Link>
+          </button>
           <SoundToggle compact />
         </div>
         <p className="scene__eyebrow">Pass and play</p>
@@ -374,7 +438,7 @@ export function LocalMode() {
         <p className="scene__lead">{gameModule.localLead}</p>
       </header>
 
-      {!session ? (
+      {!session && !hatClueEntry ? (
         <div className="panel-grid panel-grid--local">
           <section className="panel panel--hero panel--stacked">
             <div className="panel-heading">
@@ -404,6 +468,10 @@ export function LocalMode() {
                     <p>
                       {gameId === 'hatgame'
                         ? `${settings.turnDurationSeconds}s turns, ${settings.cluesPerPlayer} clues each`
+                        : gameId === 'imposter'
+                          ? `${settings.rounds} spoken rounds, ${settings.imposterCount} imposter${settings.imposterCount === 1 ? '' : 's'}`
+                          : gameId === 'drawnguess'
+                            ? `${settings.roundDurationSeconds}s rounds`
                         : `${settings.turnDurationSeconds}s turns${
                             settings.totalRounds ? `, ${settings.totalRounds} rounds` : ''
                           }`}
@@ -424,13 +492,17 @@ export function LocalMode() {
 
             <div className="actions actions--stretch">
               <button disabled={busyAction === 'start-session' || Boolean(startHint)} onClick={startSession}>
-                {busyAction === 'start-session' ? 'Preparing round' : 'Start local round'}
+                {busyAction === 'start-session'
+                  ? 'Preparing round'
+                  : gameId === 'hatgame'
+                    ? 'Start private clue entry'
+                    : 'Start local round'}
               </button>
             </div>
             <p className="helper-text">
               {startHint ??
                 (gameModule.requiresHatClues
-                  ? 'Ready once teams and clue packs are set.'
+                  ? 'Start when players are set. Clues will be collected privately after this.'
                   : 'Ready once the names look right.')}
             </p>
           </section>
@@ -462,6 +534,7 @@ export function LocalMode() {
                     rebalanceWhoWhatWherePlayers(currentPlayers, settings.teamCount)
                   )
                 }
+                minimumPlayers={game.minPlayers ?? 2}
                 showHeading={false}
               />
             </div>
@@ -475,26 +548,67 @@ export function LocalMode() {
             >
               <summary className="disclosure__summary">
                 <div className="disclosure__summary-copy">
-                  <h2>Clue packs</h2>
+                  <h2>Private clue entry</h2>
                   <p>
-                    {readyCluePacks} / {players.length} ready
+                    Phone-pass setup before the round starts
                   </p>
                 </div>
               </summary>
               <div className="disclosure__body">
-                <LocalHatGameClueEditor
-                  players={players}
-                  clueSubmissions={hatClueSubmissions}
-                  cluesPerPlayer={settings.cluesPerPlayer}
-                  busyAction={busyAction}
-                  onChangeClue={handleChangeHatGameClue}
-                  onGenerateClues={handleGenerateHatGameClues}
-                  showHeading={false}
-                />
+                <div className="notice-card">
+                  <strong>Clues stay secret before the game starts</strong>
+                  <p>
+                    After you start, the phone passes around so each player can enter and
+                    confirm their own clue pack privately.
+                  </p>
+                </div>
               </div>
             </details>
           )}
         </div>
+      ) : !session && hatClueEntry ? (
+        <>
+          {error && <p className="connection-banner connection-banner--error">{error}</p>}
+          <HandoffPanel
+            pill={`Clue pack ${hatClueEntry.playerIndex + 1} / ${players.length}`}
+            title={`Pass to ${players[hatClueEntry.playerIndex]?.name ?? 'Next player'}`}
+            targetName={players[hatClueEntry.playerIndex]?.name ?? 'Next player'}
+            description="Only this player should enter and confirm their clues before handing the phone on."
+            isRevealed={hatClueEntry.isRevealed}
+            onReveal={() =>
+              setHatClueEntry((currentFlow) =>
+                currentFlow ? { ...currentFlow, isRevealed: true } : currentFlow
+              )
+            }
+            onHide={() =>
+              setHatClueEntry((currentFlow) =>
+                currentFlow ? { ...currentFlow, isRevealed: false } : currentFlow
+              )
+            }
+            showHideButton={false}
+            footer={
+              hatClueEntry.isRevealed ? (
+                <button disabled={busyAction === 'start-session'} onClick={handleConfirmHatGameClues}>
+                  {hatClueEntry.playerIndex === players.length - 1
+                    ? busyAction === 'start-session'
+                      ? 'Starting game'
+                      : 'Confirm clues and start game'
+                    : 'Confirm clues and pass on'}
+                </button>
+              ) : null
+            }
+          >
+            <LocalHatGameClueEditor
+              players={[players[hatClueEntry.playerIndex]].filter(Boolean)}
+              clueSubmissions={hatClueSubmissions}
+              cluesPerPlayer={settings.cluesPerPlayer}
+              busyAction={busyAction}
+              onChangeClue={handleChangeHatGameClue}
+              onGenerateClues={handleGenerateHatGameClues}
+              showHeading={false}
+            />
+          </HandoffPanel>
+        </>
       ) : (
         <>
           {error && <p className="connection-banner connection-banner--error">{error}</p>}

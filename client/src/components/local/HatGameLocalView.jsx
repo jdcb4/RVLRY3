@@ -87,6 +87,10 @@ export function HatGameLocalView({
   if (session.stage === 'turn') {
     const currentClue =
       session.activeTurn?.clueQueue[session.activeTurn?.queueIndex]?.text ?? 'Loading';
+    const showingSkippedClue =
+      session.activeTurn?.skippedCluePoolIndex !== null &&
+      session.activeTurn?.clueQueue[session.activeTurn?.queueIndex]?.poolIndex ===
+        session.activeTurn?.skippedCluePoolIndex;
 
     return (
       <div className="gameplay-stack">
@@ -131,14 +135,16 @@ export function HatGameLocalView({
 
           {session.activeTurn?.skippedCluePoolIndex !== null && (
             <div className="notice-card notice-card--focus">
-              <strong>Skipped clue waiting</strong>
+              <strong>{showingSkippedClue ? 'Back on skipped clue' : 'Skipped clue waiting'}</strong>
               <p>
-                {session.activeTurn?.skippedClueText ??
-                  'Bring the skipped clue back before using another skip.'}
+                {showingSkippedClue
+                  ? 'Finish this clue before moving on.'
+                  : 'Bring the skipped clue back before using another skip.'}
               </p>
               <div className="actions">
                 <button
                   className="secondary-action"
+                  disabled={showingSkippedClue}
                   onClick={() => applyAction({ type: 'return-skipped-clue' })}
                 >
                   Go back to skipped clue
@@ -263,6 +269,7 @@ export function HatGameLocalView({
           onReveal={() => setHandoffVisible(true)}
           onHide={() => setHandoffVisible(false)}
           revealLabel="Describer ready"
+          showHideButton={false}
           footer={
             handoffVisible ? (
               <button disabled={busyAction === 'start-turn'} onClick={onStartTurn}>

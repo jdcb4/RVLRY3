@@ -44,6 +44,7 @@ export function DrawNGuessLocalView({
           isRevealed={isRevealed}
           onReveal={() => setIsRevealed(true)}
           onHide={() => setIsRevealed(false)}
+          showHideButton={false}
         >
           {isDrawStage ? (
             <DrawingPad
@@ -98,7 +99,8 @@ export function DrawNGuessLocalView({
           items={[
             { label: 'Players', value: session.players.length },
             { label: 'Entries', value: session.results?.chain?.length ?? 0 },
-            { label: 'Submissions', value: session.submissions }
+            { label: 'Submissions', value: session.submissions },
+            { label: 'Round length', value: `${session.settings?.roundDurationSeconds ?? 45}s` }
           ]}
         />
 

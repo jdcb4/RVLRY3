@@ -69,8 +69,7 @@ describe('play UI', () => {
           teamCount: 2,
           turnDurationSeconds: 45,
           totalRounds: 3,
-          freeSkips: 1,
-          skipPenalty: 1
+          skipLimit: 1
         },
         teams: [
           { id: 'team-1', name: 'Team 1', score: 0 },
@@ -117,13 +116,14 @@ describe('play UI', () => {
           revealIndex: 0,
           clueIndex: 0,
           votingIndex: 0,
+          settings: { rounds: 2, imposterCount: 1 },
           players: [
             { id: 'p1', name: 'Alex' },
             { id: 'p2', name: 'Blair' }
           ],
-          imposterId: 'p2',
+          imposterIds: ['p2'],
           prompt: 'Volcano',
-          clues: []
+          clueTurns: []
         }}
         applyAction={applyAction}
         busyAction=""
@@ -140,6 +140,16 @@ describe('play UI', () => {
     expect(screen.getByText('Crew')).toBeTruthy();
     expect(screen.getByText('Volcano')).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Lock and pass' })).toBeTruthy();
+
+    await user.click(screen.getByRole('button', { name: 'Hide screen' }));
+
+    expect(screen.getByRole('button', { name: 'Lock and pass' })).toBeTruthy();
+    expect(screen.queryByText('Crew')).toBeNull();
+    expect(screen.queryByText('Imposter')).toBeNull();
+
+    await user.click(screen.getByRole('button', { name: 'Lock and pass' }));
+
+    expect(applyAction).toHaveBeenCalledWith({ type: 'next-reveal' });
   });
 
   it('auto-ends a local timed turn when the countdown expires', () => {
@@ -249,8 +259,7 @@ describe('play UI', () => {
           teamCount: 2,
           turnDurationSeconds: 45,
           totalRounds: 3,
-          freeSkips: 1,
-          skipPenalty: 1
+          skipLimit: 1
         },
         teams: [
           { id: 'team-1', name: 'Team 1', score: 0 },

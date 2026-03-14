@@ -208,6 +208,53 @@ describe.sequential('RVLRY server integration', () => {
     });
   });
 
+  it('restores host ownership when the original host refreshes and rejoins', async () => {
+    harnesses = [await connectHarness(baseUrl), await connectHarness(baseUrl)];
+    const [host, guest] = harnesses;
+
+    const createdRoom = await host.emit('room:create', {
+      gameId: 'whowhatwhere',
+      playerName: 'Alex',
+      playerToken: 'refresh-host'
+    });
+    host.playerId = createdRoom.playerId;
+    const roomCode = createdRoom.code;
+
+    const joinedRoom = await guest.emit('room:join', {
+      code: roomCode,
+      playerName: 'Blair',
+      playerToken: 'refresh-guest'
+    });
+    guest.playerId = joinedRoom.playerId;
+
+    await waitFor(() => host.state.room?.players?.length === 2, 'refresh host lobby to populate');
+
+    const originalHostId = host.playerId;
+    const originalHostTeamId =
+      host.state.room.players.find((player) => player.id === originalHostId)?.teamId ?? null;
+
+    host.socket.disconnect();
+    await waitFor(() => guest.state.room?.players?.length === 1, 'host disconnect to propagate');
+
+    const rejoinedHost = await connectHarness(baseUrl);
+    harnesses.push(rejoinedHost);
+
+    const restoredRoom = await rejoinedHost.emit('room:join', {
+      code: roomCode,
+      playerName: 'Alex',
+      playerToken: 'refresh-host'
+    });
+    rejoinedHost.playerId = restoredRoom.playerId;
+
+    expect(restoredRoom.playerId).toBe(originalHostId);
+
+    await waitFor(() => rejoinedHost.state.room?.players?.length === 2, 'host rejoin to propagate');
+
+    const restoredHost = rejoinedHost.state.room.players.find((player) => player.id === originalHostId);
+    expect(rejoinedHost.state.room.hostId).toBe(originalHostId);
+    expect(restoredHost?.teamId ?? null).toBe(originalHostTeamId);
+  });
+
   it('completes an Imposter room over websockets', async () => {
     harnesses = await Promise.all(Array.from({ length: 4 }, () => connectHarness(baseUrl)));
     const [host, ...guests] = harnesses;
@@ -260,8 +307,8 @@ describe.sequential('RVLRY server integration', () => {
       const clueNumber = host.state.room.gamePublicState.clueCount + 1;
       const response = await actingHarness.emit('game:action', {
         code: roomCode,
-        type: 'submit-clue',
-        payload: { text: `clue-${clueNumber}` }
+        type: 'advance-clue-turn',
+        payload: { clueNumber }
       });
       expect(response.ok).toBe(true);
 
@@ -273,6 +320,13 @@ describe.sequential('RVLRY server integration', () => {
       );
     }
 
+    expect(host.state.room.gamePublicState.stage).toBe('discussion');
+    const openedVoting = await host.emit('game:action', {
+      code: roomCode,
+      type: 'start-voting',
+      payload: {}
+    });
+    expect(openedVoting.ok).toBe(true);
     expect(host.state.room.gamePublicState.stage).toBe('voting');
 
     for (const harness of harnesses) {
@@ -283,7 +337,7 @@ describe.sequential('RVLRY server integration', () => {
       const response = await harness.emit('game:action', {
         code: roomCode,
         type: 'cast-vote',
-        payload: { targetPlayerId }
+        payload: { targetPlayerIds: [targetPlayerId] }
       });
       expect(response.ok).toBe(true);
     }
@@ -328,8 +382,7 @@ describe.sequential('RVLRY server integration', () => {
         teamCount: 3,
         turnDurationSeconds: 30,
         totalRounds: 1,
-        freeSkips: 1,
-        skipPenalty: 1
+        skipLimit: 1
       }
     });
     expect(updatedSettings.ok).toBe(true);
@@ -383,6 +436,13 @@ describe.sequential('RVLRY server integration', () => {
           payload: {}
         });
         expect(skipped.ok).toBe(true);
+
+        const returnedSkipped = await describerHarness.emit('game:action', {
+          code: roomCode,
+          type: 'return-skipped-word',
+          payload: {}
+        });
+        expect(returnedSkipped.ok).toBe(true);
       }
 
       const ended = await describerHarness.emit('game:action', {
@@ -569,31 +629,38 @@ describe.sequential('RVLRY server integration', () => {
       'drawnguess round to start'
     );
 
-    const playersById = new Map(harnesses.map((harness) => [harness.playerId, harness]));
-
     while (host.state.room.gamePublicState.stage !== 'results') {
-      const { stage, activePlayerId, submissions } = host.state.room.gamePublicState;
-      const actingHarness = playersById.get(activePlayerId);
-      const response = await actingHarness.emit('game:action', {
-        code: roomCode,
-        type: stage === 'draw' ? 'submit-drawing' : 'submit-guess',
-        payload:
-          stage === 'draw'
-            ? { imageData: TEST_DRAWING }
-            : { text: `guess-${submissions + 1}` }
-      });
-      expect(response.ok).toBe(true);
+      const { roundMode, roundNumber } = host.state.room.gamePublicState;
+      for (const harness of harnesses) {
+        const response = await harness.emit('game:action', {
+          code: roomCode,
+          type:
+            roundMode === 'draw'
+              ? 'submit-drawing'
+              : roundMode === 'guess'
+                ? 'submit-guess'
+                : 'pass-book',
+          payload:
+            roundMode === 'draw'
+              ? { imageData: TEST_DRAWING }
+              : roundMode === 'guess'
+                ? { text: `guess-${roundNumber}-${harness.playerId}` }
+                : {}
+        });
+        expect(response.ok).toBe(true);
+      }
 
       await waitFor(
         () =>
-          host.state.room.gamePublicState.submissions > submissions ||
+          host.state.room.gamePublicState.roundNumber > roundNumber ||
           host.state.room.gamePublicState.stage === 'results',
-        'next drawnguess submission'
+        'next drawnguess round'
       );
     }
 
-    const chain = host.state.room.gamePublicState.results.chain;
-    expect(chain.map((entry) => entry.type)).toEqual(['prompt', 'drawing', 'guess', 'drawing', 'guess']);
+    const books = host.state.room.gamePublicState.results.books;
+    expect(books).toHaveLength(4);
+    expect(books.every((book) => book.entries.at(-1)?.type === 'drawing')).toBe(true);
 
     const returned = await host.emit('room:return-to-lobby', { code: roomCode });
     expect(returned.ok).toBe(true);

@@ -26,8 +26,10 @@ export function WhoWhatWhereLobby({
     { label: 'Teams', value: `${settingsForm.teamCount}` },
     { label: 'Turn length', value: `${settingsForm.turnDurationSeconds}s` },
     { label: 'Rounds', value: `${settingsForm.totalRounds}` },
-    { label: 'Free skips', value: `${settingsForm.freeSkips}` },
-    { label: 'Skip penalty', value: `${settingsForm.skipPenalty} pt` }
+    {
+      label: 'Skipped words',
+      value: settingsForm.skipLimit < 0 ? 'Unlimited' : `${settingsForm.skipLimit}`
+    }
   ];
 
   const handleRebalance = async () => {
@@ -120,33 +122,23 @@ export function WhoWhatWhereLobby({
               </label>
 
               <label className="settings-field">
-                <span className="helper-text">Free skips</span>
+                <span className="helper-text">Skipped words waiting</span>
                 <select
-                  value={settingsForm.freeSkips}
+                  value={String(settingsForm.skipLimit)}
                   disabled={pendingAction === 'update-settings'}
                   onChange={(event) =>
-                    updateSetting('freeSkips', Number.parseInt(event.target.value, 10))
+                    updateSetting(
+                      'skipLimit',
+                      event.target.value === 'unlimited'
+                        ? 'unlimited'
+                        : Number.parseInt(event.target.value, 10)
+                    )
                   }
                 >
-                  <option value={0}>0</option>
-                  <option value={1}>1</option>
-                  <option value={2}>2</option>
-                  <option value={3}>3</option>
-                </select>
-              </label>
-
-              <label className="settings-field">
-                <span className="helper-text">Skip penalty</span>
-                <select
-                  value={settingsForm.skipPenalty}
-                  disabled={pendingAction === 'update-settings'}
-                  onChange={(event) =>
-                    updateSetting('skipPenalty', Number.parseInt(event.target.value, 10))
-                  }
-                >
-                  <option value={0}>0 points</option>
-                  <option value={1}>1 point</option>
-                  <option value={2}>2 points</option>
+                  <option value={1}>1 word</option>
+                  <option value={2}>2 words</option>
+                  <option value={3}>3 words</option>
+                  <option value="unlimited">Unlimited</option>
                 </select>
               </label>
             </div>

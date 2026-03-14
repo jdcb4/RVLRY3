@@ -41,8 +41,10 @@ export function GameLobbyScreen() {
     teamCount: 2,
     turnDurationSeconds: 45,
     totalRounds: 3,
-    freeSkips: 1,
-    skipPenalty: 1,
+    skipLimit: 1,
+    rounds: 2,
+    imposterCount: 1,
+    roundDurationSeconds: 45,
     cluesPerPlayer: 6,
     skipsPerTurn: 1
   });

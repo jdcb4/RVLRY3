@@ -128,7 +128,8 @@ const movePlayerToRejoinSlots = (room, player) => {
     name: player.name,
     seat: player.seat,
     ready: player.ready,
-    teamId: player.teamId ?? null
+    teamId: player.teamId ?? null,
+    wasHost: room.hostId === player.id
   });
 };
 
@@ -139,15 +140,18 @@ const restorePlayerFromRejoinSlot = (room, playerToken, playerName, socketId) =>
   }
 
   room.rejoinSlots.delete(playerToken);
-  return createPlayer({
-    id: slot.id,
-    playerToken: slot.playerToken,
-    playerName: playerName || slot.name,
-    socketId,
-    seat: slot.seat,
-    ready: room.phase === 'lobby' ? false : slot.ready,
-    teamId: slot.teamId ?? null
-  });
+  return {
+    player: createPlayer({
+      id: slot.id,
+      playerToken: slot.playerToken,
+      playerName: playerName || slot.name,
+      socketId,
+      seat: slot.seat,
+      ready: room.phase === 'lobby' ? false : slot.ready,
+      teamId: slot.teamId ?? null
+    }),
+    wasHost: Boolean(slot.wasHost)
+  };
 };
 
 const syncHost = (room) => {
@@ -455,10 +459,14 @@ export function registerRoomHandlers(io, wordStore, { rooms = new Map() } = {}) 
         return;
       }
 
-      const restoredPlayer = restorePlayerFromRejoinSlot(room, playerToken, playerName, socket.id);
-      if (restoredPlayer) {
+      const restoredJoin = restorePlayerFromRejoinSlot(room, playerToken, playerName, socket.id);
+      if (restoredJoin) {
+        const { player: restoredPlayer, wasHost } = restoredJoin;
         room.players.push(restoredPlayer);
         autoAssignTeamPlayer(room, restoredPlayer);
+        if (wasHost) {
+          room.hostId = restoredPlayer.id;
+        }
         syncHost(room);
         socket.join(room.code);
         emitRoomUpdate(io, room);
@@ -844,6 +852,7 @@ export function registerRoomHandlers(io, wordStore, { rooms = new Map() } = {}) 
         teams: room.teams,
         settings: room.settings,
         lobbyState: room.lobbyState,
+        hostId: room.hostId,
         wordStore
       });
 

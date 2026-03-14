@@ -14,7 +14,8 @@ export function HandoffPanel({
   children,
   footer = null,
   revealLabel,
-  hideLabel = 'Hide screen'
+  hideLabel = 'Hide screen',
+  showHideButton = true
 }) {
   const nextRevealLabel =
     revealLabel ?? (targetName ? `${targetName} ready` : 'Ready');
@@ -37,9 +38,11 @@ export function HandoffPanel({
       )}
 
       <div className="actions actions--stretch">
-        <button onClick={isRevealed ? onHide : onReveal}>
-          {isRevealed ? hideLabel : nextRevealLabel}
-        </button>
+        {(!isRevealed || showHideButton) ? (
+          <button onClick={isRevealed ? onHide : onReveal}>
+            {isRevealed ? hideLabel : nextRevealLabel}
+          </button>
+        ) : null}
         {footer}
       </div>
     </section>
@@ -54,6 +57,7 @@ export function LocalPlayersEditor({
   onAddPlayer,
   onRemovePlayer,
   onAutoBalance,
+  minimumPlayers = 2,
   showHeading = true
 }) {
   return (
@@ -110,7 +114,7 @@ export function LocalPlayersEditor({
 
             <button
               className="secondary-action"
-              disabled={players.length <= 2}
+              disabled={players.length <= minimumPlayers}
               onClick={() => onRemovePlayer(player.id)}
             >
               Remove
@@ -188,7 +192,7 @@ export function LocalHatGameClueEditor({
                 >
                   {busyAction === `generate-hat-clues:${player.id}`
                     ? 'Loading suggestions'
-                    : 'Generate from Who list'}
+                    : 'Give me suggestions'}
                 </button>
               </div>
             </details>
@@ -267,31 +271,93 @@ export function WhoWhatWhereSettingsCard({ settings, onChange, showHeading = tru
         </label>
 
         <label className="settings-field">
-          <span className="helper-text">Free skips</span>
+          <span className="helper-text">Skips waiting</span>
           <select
-            value={settings.freeSkips}
+            value={String(settings.skipLimit)}
             onChange={(event) =>
-              onChange('freeSkips', Number.parseInt(event.target.value, 10))
+              onChange(
+                'skipLimit',
+                event.target.value === 'unlimited'
+                  ? 'unlimited'
+                  : Number.parseInt(event.target.value, 10)
+              )
             }
           >
-            <option value={0}>0</option>
-            <option value={1}>1</option>
-            <option value={2}>2</option>
-            <option value={3}>3</option>
+            <option value={1}>1 word</option>
+            <option value={2}>2 words</option>
+            <option value={3}>3 words</option>
+            <option value="unlimited">Unlimited</option>
+          </select>
+        </label>
+      </div>
+    </section>
+  );
+}
+
+export function ImposterSettingsCard({ settings, onChange, showHeading = true }) {
+  return (
+    <section className="settings-card">
+      {showHeading ? (
+        <div className="panel-heading">
+          <h3>Round settings</h3>
+        </div>
+      ) : null}
+
+      <div className="settings-grid">
+        <label className="settings-field">
+          <span className="helper-text">Spoken rounds</span>
+          <select
+            value={settings.rounds}
+            onChange={(event) =>
+              onChange('rounds', Number.parseInt(event.target.value, 10))
+            }
+          >
+            <option value={1}>1 round</option>
+            <option value={2}>2 rounds</option>
+            <option value={3}>3 rounds</option>
+            <option value={4}>4 rounds</option>
           </select>
         </label>
 
         <label className="settings-field">
-          <span className="helper-text">Skip penalty</span>
+          <span className="helper-text">Imposters</span>
           <select
-            value={settings.skipPenalty}
+            value={settings.imposterCount}
             onChange={(event) =>
-              onChange('skipPenalty', Number.parseInt(event.target.value, 10))
+              onChange('imposterCount', Number.parseInt(event.target.value, 10))
             }
           >
-            <option value={0}>0 points</option>
-            <option value={1}>1 point</option>
-            <option value={2}>2 points</option>
+            <option value={1}>1 imposter</option>
+            <option value={2}>2 imposters</option>
+            <option value={3}>3 imposters</option>
+          </select>
+        </label>
+      </div>
+    </section>
+  );
+}
+
+export function DrawNGuessSettingsCard({ settings, onChange, showHeading = true }) {
+  return (
+    <section className="settings-card">
+      {showHeading ? (
+        <div className="panel-heading">
+          <h3>Round settings</h3>
+        </div>
+      ) : null}
+
+      <div className="settings-grid">
+        <label className="settings-field">
+          <span className="helper-text">Round length</span>
+          <select
+            value={settings.roundDurationSeconds}
+            onChange={(event) =>
+              onChange('roundDurationSeconds', Number.parseInt(event.target.value, 10))
+            }
+          >
+            <option value={30}>30 seconds</option>
+            <option value={45}>45 seconds</option>
+            <option value={60}>60 seconds</option>
           </select>
         </label>
       </div>

@@ -2,7 +2,12 @@ import { DrawNGuessLocalView } from './DrawNGuessLocalView';
 import { HatGameLocalView } from './HatGameLocalView';
 import { ImposterLocalView } from './ImposterLocalView';
 import { WhoWhatWhereLocalView } from './WhoWhatWhereLocalView';
-import { HatGameSettingsCard, WhoWhatWhereSettingsCard } from './common';
+import {
+  DrawNGuessSettingsCard,
+  HatGameSettingsCard,
+  ImposterSettingsCard,
+  WhoWhatWhereSettingsCard
+} from './common';
 
 export const LOCAL_VIEW_COMPONENTS = {
   imposter: ImposterLocalView,
@@ -12,14 +17,18 @@ export const LOCAL_VIEW_COMPONENTS = {
 };
 
 export const LOCAL_SETTINGS_COMPONENTS = {
+  imposter: ImposterSettingsCard,
+  drawnguess: DrawNGuessSettingsCard,
   whowhatwhere: WhoWhatWhereSettingsCard,
   hatgame: HatGameSettingsCard
 };
 
 export {
+  DrawNGuessSettingsCard,
   DrawNGuessLocalView,
   HatGameLocalView,
   HatGameSettingsCard,
+  ImposterSettingsCard,
   ImposterLocalView,
   WhoWhatWhereSettingsCard,
   WhoWhatWhereLocalView

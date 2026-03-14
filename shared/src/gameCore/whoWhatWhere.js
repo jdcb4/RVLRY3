@@ -15,6 +15,56 @@ export const getWhoWhatWhereContext = (game, players) =>
     describerIndexes: game.describerIndexes ?? {}
   });
 
+export const getWhoWhatWhereCurrentWord = (activeTurn) => {
+  if (!activeTurn) {
+    return null;
+  }
+
+  if (activeTurn.currentWordSource === 'skipped') {
+    return activeTurn.currentSkippedWord?.word ?? null;
+  }
+
+  return activeTurn.wordQueue[activeTurn.queueIndex] ?? null;
+};
+
+const getWhoWhatWhereRemainingMainWords = (activeTurn) =>
+  Math.max(activeTurn.wordQueue.length - activeTurn.queueIndex, 0);
+
+const needsWhoWhatWhereBuffer = (activeTurn) =>
+  activeTurn.currentWordSource === 'main' &&
+  getWhoWhatWhereRemainingMainWords(activeTurn) < 10;
+
+const canQueueAnotherSkippedWord = (activeTurn) =>
+  activeTurn.skipLimit < 0 || activeTurn.skippedWords.length < activeTurn.skipLimit;
+
+const primeWhoWhatWhereNextWord = (activeTurn, buildMoreWords) => {
+  if (needsWhoWhatWhereBuffer(activeTurn) && buildMoreWords) {
+    const moreWords = buildMoreWords(activeTurn.category)
+      .map((word) => normalizeText(word))
+      .filter(Boolean);
+
+    if (moreWords.length > 0) {
+      activeTurn.wordQueue = [...activeTurn.wordQueue, ...moreWords];
+    }
+  }
+
+  const nextMainWord = activeTurn.wordQueue[activeTurn.queueIndex] ?? null;
+  if (nextMainWord) {
+    activeTurn.currentWordSource = 'main';
+    activeTurn.currentSkippedWord = null;
+    return;
+  }
+
+  if (activeTurn.skippedWords.length > 0) {
+    activeTurn.currentWordSource = 'skipped';
+    activeTurn.currentSkippedWord = activeTurn.skippedWords.shift();
+    return;
+  }
+
+  activeTurn.currentWordSource = 'main';
+  activeTurn.currentSkippedWord = null;
+};
+
 export const createWhoWhatWhereGame = ({ teams, settings }) => {
   const nextTeams = cloneTeams(teams).map((team) => ({ ...team, score: 0 }));
   const teamOrder = nextTeams.map((team) => team.id);
@@ -41,7 +91,7 @@ const createTurnSummary = (game, context) => ({
   scoreDelta: game.activeTurn.score,
   correctCount: game.activeTurn.correctCount,
   skippedCount: game.activeTurn.skippedCount,
-  freeSkipsRemaining: game.activeTurn.freeSkipsRemaining,
+  pendingSkippedCount: game.activeTurn.skippedWords.length,
   words: game.activeTurn.wordHistory
 });
 
@@ -156,10 +206,13 @@ export const applyWhoWhatWhereAction = (
         category,
         wordQueue: words,
         queueIndex: 0,
+        currentWordSource: 'main',
+        currentSkippedWord: null,
         score: 0,
         correctCount: 0,
         skippedCount: 0,
-        freeSkipsRemaining: game.settings.freeSkips,
+        skipLimit: game.settings.skipLimit,
+        skippedWords: [],
         wordHistory: []
       }
     };
@@ -179,7 +232,7 @@ export const applyWhoWhatWhereAction = (
     return finishWhoWhatWhereTurn(game, players);
   }
 
-  if (!['mark-correct', 'skip-word'].includes(action.type)) {
+  if (!['mark-correct', 'skip-word', 'return-skipped-word'].includes(action.type)) {
     return { error: 'Unknown action for WhoWhatWhere' };
   }
 
@@ -196,7 +249,7 @@ export const applyWhoWhatWhereAction = (
     return finishWhoWhatWhereTurn(game, players);
   }
 
-  const currentWord = game.activeTurn.wordQueue[game.activeTurn.queueIndex] ?? null;
+  const currentWord = getWhoWhatWhereCurrentWord(game.activeTurn);
   if (!currentWord) {
     return finishWhoWhatWhereTurn(game, players);
   }
@@ -204,8 +257,27 @@ export const applyWhoWhatWhereAction = (
   const activeTurn = {
     ...game.activeTurn,
     wordQueue: [...game.activeTurn.wordQueue],
+    skippedWords: [...(game.activeTurn.skippedWords ?? [])],
     wordHistory: [...game.activeTurn.wordHistory]
   };
+
+  if (action.type === 'return-skipped-word') {
+    if (activeTurn.currentWordSource === 'skipped') {
+      return { error: 'Already back on a skipped word' };
+    }
+
+    if (activeTurn.skippedWords.length === 0) {
+      return { error: 'There are no skipped words waiting' };
+    }
+
+    activeTurn.currentWordSource = 'skipped';
+    activeTurn.currentSkippedWord = activeTurn.skippedWords.shift();
+
+    return {
+      ...game,
+      activeTurn
+    };
+  }
 
   if (action.type === 'mark-correct') {
     activeTurn.score += 1;
@@ -213,37 +285,41 @@ export const applyWhoWhatWhereAction = (
     activeTurn.wordHistory.push({
       word: currentWord,
       status: 'correct',
+      source: activeTurn.currentWordSource,
       timestamp: makeTimestamp()
     });
-  }
-
-  if (action.type === 'skip-word') {
+    if (activeTurn.currentWordSource === 'skipped') {
+      activeTurn.currentSkippedWord = null;
+    } else {
+      activeTurn.queueIndex += 1;
+    }
+  } else if (action.type === 'skip-word') {
     activeTurn.skippedCount += 1;
     activeTurn.wordHistory.push({
       word: currentWord,
       status: 'skipped',
+      source: activeTurn.currentWordSource,
       timestamp: makeTimestamp()
     });
 
-    if (activeTurn.freeSkipsRemaining > 0) {
-      activeTurn.freeSkipsRemaining -= 1;
+    if (activeTurn.currentWordSource === 'skipped') {
+      if (activeTurn.currentSkippedWord) {
+        activeTurn.skippedWords.push(activeTurn.currentSkippedWord);
+        activeTurn.currentSkippedWord = null;
+      }
     } else {
-      activeTurn.score -= game.settings.skipPenalty;
+      if (!canQueueAnotherSkippedWord(activeTurn)) {
+        return { error: 'Return to skipped words before skipping again' };
+      }
+
+      activeTurn.skippedWords.push({ word: currentWord });
+      activeTurn.queueIndex += 1;
     }
   }
 
-  activeTurn.queueIndex += 1;
+  primeWhoWhatWhereNextWord(activeTurn, buildMoreWords);
 
-  if (!activeTurn.wordQueue[activeTurn.queueIndex] && buildMoreWords) {
-    const moreWords = buildMoreWords(activeTurn.category)
-      .map((word) => normalizeText(word))
-      .filter(Boolean);
-    if (moreWords.length > 0) {
-      activeTurn.wordQueue = [...activeTurn.wordQueue, ...moreWords];
-    }
-  }
-
-  if (!activeTurn.wordQueue[activeTurn.queueIndex]) {
+  if (!getWhoWhatWhereCurrentWord(activeTurn)) {
     return finishWhoWhatWhereTurn(
       {
         ...game,

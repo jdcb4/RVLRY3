@@ -3,7 +3,8 @@ import {
   buildHatGameCluePool,
   createHatGame,
   getHatGameContext,
-  getHatGamePhaseMeta
+  getHatGamePhaseMeta,
+  isHatGameShowingSkippedClue
 } from '../../../../shared/src/gameCore/hatGame.js';
 import {
   buildTeams,
@@ -14,15 +15,15 @@ import {
 import {
   applyWhoWhatWhereAction as applyCoreWhoWhatWhereAction,
   createWhoWhatWhereGame,
-  getWhoWhatWhereContext
+  getWhoWhatWhereContext,
+  getWhoWhatWhereCurrentWord
 } from '../../../../shared/src/gameCore/whoWhatWhere.js';
 
 export const DEFAULT_WHOWHATWHERE_SETTINGS = {
   teamCount: 2,
   turnDurationSeconds: 45,
   totalRounds: 3,
-  freeSkips: 1,
-  skipPenalty: 1
+  skipLimit: 1
 };
 
 export const DEFAULT_HATGAME_SETTINGS = {
@@ -40,7 +41,7 @@ const buildPrivateState = (players, mapper) =>
 const getTeamMap = (teams = []) => new Map(teams.map((team) => [team.id, team]));
 
 const buildWhoWhatWhereTurnSnapshot = (activeTurn) => {
-  const currentWord = activeTurn.wordQueue[activeTurn.queueIndex] ?? null;
+  const currentWord = getWhoWhatWhereCurrentWord(activeTurn);
 
   return {
     startedAt: activeTurn.startedAt,
@@ -50,7 +51,9 @@ const buildWhoWhatWhereTurnSnapshot = (activeTurn) => {
     score: activeTurn.score,
     correctCount: activeTurn.correctCount,
     skippedCount: activeTurn.skippedCount,
-    freeSkipsRemaining: activeTurn.freeSkipsRemaining,
+    skipLimit: activeTurn.skipLimit,
+    pendingSkippedCount: activeTurn.skippedWords.length,
+    returningSkippedWord: activeTurn.currentWordSource === 'skipped',
     currentWordLength: currentWord?.length ?? 0,
     wordHistory: activeTurn.wordHistory
   };
@@ -91,7 +94,7 @@ const buildWhoWhatWherePublicState = (players, game) => {
 
 const buildWhoWhatWherePrivateState = (players, publicState, game) => {
   const teamMap = getTeamMap(game.teams);
-  const currentWord = game.activeTurn ? game.activeTurn.wordQueue[game.activeTurn.queueIndex] ?? null : null;
+  const currentWord = game.activeTurn ? getWhoWhatWhereCurrentWord(game.activeTurn) : null;
 
   return buildPrivateState(players, (player) => {
     const playerTeam = teamMap.get(player.teamId) ?? null;
@@ -108,15 +111,21 @@ const buildWhoWhatWherePrivateState = (players, publicState, game) => {
       canStartTurn: publicState.stage === 'ready' && isDescriber,
       canMarkCorrect: publicState.stage === 'turn' && isDescriber,
       canSkip: publicState.stage === 'turn' && isDescriber,
+      canReturnSkippedWord:
+        publicState.stage === 'turn' && isDescriber && game.activeTurn?.skippedWords?.length > 0,
       canEndTurn: publicState.stage === 'turn' && isDescriber,
       category: publicState.stage === 'turn' ? game.activeTurn?.category ?? null : null,
-      word: publicState.stage === 'turn' && isDescriber ? currentWord : null
+      word: publicState.stage === 'turn' && isDescriber ? currentWord : null,
+      pendingSkippedCount: publicState.stage === 'turn' ? game.activeTurn?.skippedWords?.length ?? 0 : 0,
+      returningSkippedWord:
+        publicState.stage === 'turn' && game.activeTurn?.currentWordSource === 'skipped'
     };
   });
 };
 
 const buildHatGameTurnSnapshot = (activeTurn, phaseNumber) => {
   const currentClue = activeTurn.clueQueue[activeTurn.queueIndex] ?? null;
+  const skippedCluePending = Boolean(activeTurn.skippedCluePoolIndex !== null);
 
   return {
     startedAt: activeTurn.startedAt,
@@ -128,7 +137,8 @@ const buildHatGameTurnSnapshot = (activeTurn, phaseNumber) => {
     skippedCount: activeTurn.skippedCount,
     skipsRemaining: activeTurn.skipsRemaining,
     currentClueLength: currentClue?.text?.length ?? 0,
-    skippedCluePending: Boolean(activeTurn.skippedCluePoolIndex !== null),
+    skippedCluePending,
+    showingSkippedClue: skippedCluePending && isHatGameShowingSkippedClue(activeTurn),
     skippedClueLength: activeTurn.skippedClueText?.length ?? 0,
     clueHistory: activeTurn.clueHistory
   };
@@ -184,6 +194,11 @@ const buildHatGamePrivateState = (players, publicState, game) => {
     const isActiveTeam = player.teamId && player.teamId === publicState.activeTeamId;
     const role = !player.teamId ? 'unassigned' : isDescriber ? 'describer' : isActiveTeam ? 'guesser' : 'spectator';
 
+    const skippedCluePending =
+      publicState.stage === 'turn' && game.activeTurn?.skippedCluePoolIndex !== null;
+    const showingSkippedClue =
+      skippedCluePending && isHatGameShowingSkippedClue(game.activeTurn);
+
     return {
       teamId: player.teamId ?? null,
       teamName: playerTeam?.name ?? null,
@@ -210,9 +225,12 @@ const buildHatGamePrivateState = (players, publicState, game) => {
         publicState.stage === 'turn'
           ? game.activeTurn?.skipsRemaining ?? 0
           : game.settings.skipsPerTurn,
-      skippedCluePending: publicState.stage === 'turn' && game.activeTurn?.skippedCluePoolIndex !== null,
+      skippedCluePending,
+      showingSkippedClue,
       skippedClueText:
-        publicState.stage === 'turn' && isDescriber ? game.activeTurn?.skippedClueText ?? null : null
+        publicState.stage === 'turn' && isDescriber && showingSkippedClue
+          ? game.activeTurn?.skippedClueText ?? null
+          : null
     };
   });
 };

@@ -163,16 +163,19 @@ export function HatGamePlay({
 
             {privateState?.skippedCluePending ? (
               <div className="notice-card notice-card--focus">
-                <strong>Skipped clue waiting</strong>
+                <strong>{privateState?.showingSkippedClue ? 'Back on skipped clue' : 'Skipped clue waiting'}</strong>
                 <p>
-                  {privateState?.skippedClueText ??
-                    'Bring the skipped clue back before you skip again.'}
+                  {privateState?.showingSkippedClue
+                    ? 'Finish this clue before moving on.'
+                    : 'Bring the skipped clue back before you skip again.'}
                 </p>
                 <div className="actions">
                   <button
                     className="secondary-action"
                     disabled={
-                      pendingAction === 'return-skipped-clue' || !privateState?.canReturnSkippedClue
+                      pendingAction === 'return-skipped-clue' ||
+                      !privateState?.canReturnSkippedClue ||
+                      privateState?.showingSkippedClue
                     }
                     onClick={() => sendGameAction(roomCode, 'return-skipped-clue')}
                   >
@@ -236,8 +239,12 @@ export function HatGamePlay({
 
             {turn?.skippedCluePending ? (
               <div className="notice-card">
-                <strong>Skipped clue waiting</strong>
-                <p>The describer has to circle back before another skip.</p>
+                <strong>{turn?.showingSkippedClue ? 'Back on skipped clue' : 'Skipped clue waiting'}</strong>
+                <p>
+                  {turn?.showingSkippedClue
+                    ? 'Your team is back on the earlier skipped clue.'
+                    : 'The describer has to circle back before another skip.'}
+                </p>
               </div>
             ) : null}
           </section>

@@ -6,10 +6,15 @@ import {
   DEFAULT_LOCAL_HATGAME_SETTINGS,
   DEFAULT_LOCAL_WHOWHATWHERE_SETTINGS,
   getActiveImposterPlayer,
+  getLocalStartError,
   getImposterSecretForPlayer,
   getWhoWhatWhereContext,
   rebalanceWhoWhatWherePlayers
 } from './session';
+import {
+  getNextLocalPlayerName,
+  rotateLocalRoundPlayers
+} from '../components/local/helpers';
 
 const TEST_DRAWING = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8Xw8AApMBgZVp0QAAAABJRU5ErkJggg==';
 
@@ -20,10 +25,18 @@ describe('local pass-and-play session engine', () => {
       gameId: 'imposter',
       players,
       prompt: 'Volcano',
-      rng: () => 0.99
+      settings: { rounds: 2, imposterCount: 1 },
+      rng: (() => {
+        const values = [0.6, 0.7, 0.8, 0.1];
+        let index = 0;
+        return () => values[index++] ?? 0.9;
+      })()
     });
 
-    expect(getImposterSecretForPlayer(session, players[3].id).role).toBe('imposter');
+    const imposterId = players.find(
+      (player) => getImposterSecretForPlayer(session, player.id).role === 'imposter'
+    )?.id;
+    expect(imposterId).toBeTruthy();
 
     for (let index = 0; index < 4; index += 1) {
       const activePlayer = getActiveImposterPlayer(session);
@@ -33,20 +46,19 @@ describe('local pass-and-play session engine', () => {
 
     expect(session.stage).toBe('clues');
 
-    for (let index = 0; index < 4; index += 1) {
-      session = applyLocalAction(session, {
-        type: 'submit-clue',
-        payload: { text: `clue-${index + 1}` }
-      });
+    for (let index = 0; index < players.length * session.settings.rounds; index += 1) {
+      session = applyLocalAction(session, { type: 'advance-clue-turn' });
     }
 
+    expect(session.stage).toBe('discussion');
+    session = applyLocalAction(session, { type: 'start-voting' });
     expect(session.stage).toBe('voting');
 
     for (const player of players) {
       session = applyLocalAction(session, {
         type: 'submit-vote',
         payload: {
-          targetPlayerId: player.id === players[3].id ? players[0].id : players[3].id
+          targetPlayerIds: [player.id === imposterId ? players[0].id : imposterId]
         }
       });
     }
@@ -81,10 +93,14 @@ describe('local pass-and-play session engine', () => {
     });
     session = applyLocalAction(session, { type: 'mark-correct' });
     session = applyLocalAction(session, { type: 'skip-word' });
+    expect(session.activeTurn.skippedWords).toHaveLength(1);
+    session = applyLocalAction(session, { type: 'return-skipped-word' });
+    expect(session.activeTurn.currentWordSource).toBe('skipped');
+    session = applyLocalAction(session, { type: 'mark-correct' });
     session = applyLocalAction(session, { type: 'end-turn' });
 
     expect(session.stage).toBe('ready');
-    expect(session.teams[0].score).toBe(1);
+    expect(session.teams[0].score).toBe(2);
 
     session = applyLocalAction(session, {
       type: 'start-turn',
@@ -93,7 +109,6 @@ describe('local pass-and-play session engine', () => {
         words: ['Piano', 'Guitar', 'Drums']
       }
     });
-    session = applyLocalAction(session, { type: 'mark-correct' });
     session = applyLocalAction(session, { type: 'mark-correct' });
     session = applyLocalAction(session, { type: 'end-turn' });
 
@@ -295,5 +310,36 @@ describe('local pass-and-play session engine', () => {
     expect(nextQueue).toContain(skippedClue);
     expect(nextQueue).toContain(unfinishedClue);
     expect(nextQueue).not.toContain(initialQueue[0]);
+  });
+
+  it('requires at least three players for local Imposter', () => {
+    expect(
+      getLocalStartError({
+        gameId: 'imposter',
+        players: createLocalPlayers(2)
+      })
+    ).toBe('Need at least 3 players');
+  });
+
+  it('fills the first open default player label after removals', () => {
+    expect(
+      getNextLocalPlayerName([
+        { name: 'Player 1' },
+        { name: 'Player 3' },
+        { name: 'Alex' }
+      ])
+    ).toBe('Player 2');
+  });
+
+  it('rotates local DrawNGuess player order for the next round', () => {
+    const rotatedPlayers = rotateLocalRoundPlayers(createLocalPlayers(4));
+
+    expect(rotatedPlayers.map((player) => player.name)).toEqual([
+      'Player 2',
+      'Player 3',
+      'Player 4',
+      'Player 1'
+    ]);
+    expect(rotatedPlayers.map((player) => player.seat)).toEqual([0, 1, 2, 3]);
   });
 });

@@ -89,7 +89,7 @@ export function WhoWhatWhereLocalView({
             <span className="helper-text">Current word</span>
             <strong className="role-card__title">{currentWord}</strong>
             <span className="role-card__body">
-              Score it when they get it, or skip and take the penalty.
+              Score it when they get it. Skipped words wait in a return queue.
             </span>
           </div>
 
@@ -98,11 +98,36 @@ export function WhoWhatWhereLocalView({
               { label: 'Team', value: context.activeTeam?.name ?? 'Team' },
               { label: 'Score', value: session.activeTurn?.score ?? 0 },
               {
-                label: 'Free skips',
-                value: session.activeTurn?.freeSkipsRemaining ?? 0
+                label: 'Skipped waiting',
+                value: session.activeTurn?.skippedWords?.length ?? 0
               }
             ]}
           />
+
+          {session.activeTurn?.skippedWords?.length > 0 ? (
+            <div className="notice-card notice-card--focus">
+              <strong>
+                {session.activeTurn?.currentWordSource === 'skipped'
+                  ? 'Back on skipped words'
+                  : 'Skipped words waiting'}
+              </strong>
+              <p>
+                {session.activeTurn?.currentWordSource === 'skipped'
+                  ? 'Finish this returned word or send it to the back of the skipped queue.'
+                  : `${session.activeTurn.skippedWords.length} word(s) are waiting to come back.`}
+              </p>
+              {session.activeTurn?.currentWordSource !== 'skipped' ? (
+                <div className="actions">
+                  <button
+                    className="secondary-action"
+                    onClick={() => applyAction({ type: 'return-skipped-word' })}
+                  >
+                    Return to skipped word
+                  </button>
+                </div>
+              ) : null}
+            </div>
+          ) : null}
 
           <div className="actions actions--stretch">
             <button onClick={() => applyAction({ type: 'mark-correct' })}>Correct</button>
@@ -187,6 +212,7 @@ export function WhoWhatWhereLocalView({
           onReveal={() => setHandoffVisible(true)}
           onHide={() => setHandoffVisible(false)}
           revealLabel="Describer ready"
+          showHideButton={false}
           footer={
             handoffVisible ? (
               <button disabled={busyAction === 'start-turn'} onClick={onStartTurn}>

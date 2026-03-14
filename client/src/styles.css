@@ -661,13 +661,22 @@ summary:focus-visible {
   background: rgba(255, 255, 255, 0.08);
 }
 
-.info-popover__backdrop {
+.info-popover__backdrop,
+.info-popover__backdrop:hover,
+.info-popover__backdrop:focus-visible {
   position: fixed;
   inset: 0;
   z-index: 34;
+  display: block;
+  min-height: 0;
+  padding: 0;
   border: 0;
+  border-radius: 0;
   background: rgba(4, 13, 16, 0.58);
+  box-shadow: none;
   cursor: pointer;
+  transform: none;
+  outline: none;
 }
 
 .info-popover__panel {

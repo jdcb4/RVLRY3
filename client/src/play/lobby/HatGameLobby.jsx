@@ -73,7 +73,10 @@ export function HatGameLobby({
       setClueDrafts((currentDrafts) =>
         Array.from(
           { length: requiredClues },
-          (_, index) => suggestions[index] ?? currentDrafts[index] ?? ''
+          (_, index) =>
+            currentDrafts[index]?.trim().length > 0
+              ? currentDrafts[index]
+              : suggestions[index] ?? currentDrafts[index] ?? ''
         )
       );
       onToast('Suggestions loaded');

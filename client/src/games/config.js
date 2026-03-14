@@ -7,9 +7,9 @@ export const games = [
     howToPlay: [
       'Create a room, share the code, and wait until everyone is ready.',
       'Each crew player receives the same word. The imposter receives no word at all.',
-      'Take turns giving clues without making the answer obvious.'
+      'Take turns saying one word out loud in the room, then discuss together before voting in the app.'
     ],
-    minPlayers: 2,
+    minPlayers: 3,
     supportsLocal: true,
     lobbyFeatures: ['ready-check', 'invite-link', 'host-start'],
     gameplayView: 'imposter'
@@ -37,8 +37,8 @@ export const games = [
     description: 'Pass drawings and prompts around the room, then watch the chain drift sideways.',
     howToPlay: [
       'Build a room, bring everyone in, and use the lobby to confirm who is playing.',
-      'Players sketch, pass, and interpret prompts one round at a time.',
-      'The active prompt and chain progress stay visible during play.'
+      'Online rooms run simultaneous books so everyone draws or guesses at the same time.',
+      'Each starting word becomes its own reveal chain you can browse and export at the end.'
     ],
     minPlayers: 2,
     supportsLocal: true,

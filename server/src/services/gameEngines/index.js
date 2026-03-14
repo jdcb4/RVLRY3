@@ -18,7 +18,7 @@ const GAME_WORD_TYPE = {
 };
 
 const GAME_MIN_PLAYERS = {
-  imposter: 2,
+  imposter: 3,
   whowhatwhere: 4,
   drawnguess: 2,
   hatgame: 4
@@ -59,6 +59,7 @@ export function buildGameStartState({
   teams = [],
   settings = {},
   lobbyState = {},
+  hostId = null,
   wordStore
 }) {
   const builder = GAME_BUILDERS[gameId];
@@ -70,7 +71,7 @@ export function buildGameStartState({
     };
   }
 
-  return builder({ players, word, teams, settings, lobbyState, wordStore });
+  return builder({ players, word, teams, settings, lobbyState, hostId, wordStore });
 }
 
 export function applyGameAction({

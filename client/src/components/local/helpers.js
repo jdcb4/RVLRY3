@@ -1,6 +1,8 @@
 import {
   createLocalPlayers,
+  DEFAULT_LOCAL_DRAWNGUESS_SETTINGS,
   DEFAULT_LOCAL_HATGAME_SETTINGS,
+  DEFAULT_LOCAL_IMPOSTER_SETTINGS,
   DEFAULT_LOCAL_PLAYER_COUNT,
   DEFAULT_LOCAL_WHOWHATWHERE_SETTINGS
 } from '../../local/session';
@@ -23,10 +25,42 @@ export const getInitialPlayers = (
 export const getInitialSettingsForGame = (gameId) =>
   gameId === 'hatgame'
     ? DEFAULT_LOCAL_HATGAME_SETTINGS
-    : DEFAULT_LOCAL_WHOWHATWHERE_SETTINGS;
+    : gameId === 'imposter'
+      ? DEFAULT_LOCAL_IMPOSTER_SETTINGS
+      : gameId === 'drawnguess'
+        ? DEFAULT_LOCAL_DRAWNGUESS_SETTINGS
+        : DEFAULT_LOCAL_WHOWHATWHERE_SETTINGS;
 
 export const buildEmptyHatGameClues = (count) =>
   Array.from({ length: count }, () => '');
+
+export const getNextLocalPlayerName = (players) => {
+  const usedNumbers = new Set(
+    players
+      .map((player) => /^Player (\d+)$/.exec(String(player.name ?? '').trim())?.[1])
+      .filter(Boolean)
+      .map((value) => Number.parseInt(value, 10))
+      .filter(Number.isFinite)
+  );
+
+  let nextNumber = 1;
+  while (usedNumbers.has(nextNumber)) {
+    nextNumber += 1;
+  }
+
+  return `Player ${nextNumber}`;
+};
+
+export const rotateLocalRoundPlayers = (players) => {
+  if (players.length <= 1) {
+    return players;
+  }
+
+  return [...players.slice(1), players[0]].map((player, index) => ({
+    ...player,
+    seat: index
+  }));
+};
 
 export const syncHatGameClueSubmissions = (
   currentSubmissions,

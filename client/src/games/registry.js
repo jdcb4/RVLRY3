@@ -1,10 +1,10 @@
 export const gameModules = {
   imposter: {
-    lobbyVariant: 'standard',
+    lobbyVariant: 'imposter',
     playVariant: 'imposter',
     localVariant: 'imposter',
-    localSettingsVariant: 'none',
-    localLead: 'Reveal roles, pass for clues, then vote.',
+    localSettingsVariant: 'imposter',
+    localLead: 'Reveal roles, speak in person, discuss, then vote in the app.',
     gameplayLead: 'Keep the current move first and the evidence nearby.',
     requiresTeams: false,
     requiresHatClues: false
@@ -20,10 +20,10 @@ export const gameModules = {
     requiresHatClues: false
   },
   drawnguess: {
-    lobbyVariant: 'standard',
+    lobbyVariant: 'drawnguess',
     playVariant: 'drawnguess',
     localVariant: 'drawnguess',
-    localSettingsVariant: 'none',
+    localSettingsVariant: 'drawnguess',
     localLead: 'Pass the phone, alternate draw and guess, reveal the chain.',
     gameplayLead: 'The active step stays visible until the reveal matters.',
     requiresTeams: false,

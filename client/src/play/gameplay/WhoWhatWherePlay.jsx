@@ -111,9 +111,33 @@ export function WhoWhatWherePlay({
               items={[
                 { label: 'Turn score', value: turn?.score ?? 0 },
                 { label: 'Correct', value: turn?.correctCount ?? 0 },
-                { label: 'Free skips', value: turn?.freeSkipsRemaining ?? 0 }
+                { label: 'Skipped waiting', value: turn?.pendingSkippedCount ?? 0 }
               ]}
             />
+
+            {turn?.pendingSkippedCount > 0 ? (
+              <div className="notice-card notice-card--focus">
+                <strong>
+                  {privateState?.returningSkippedWord ? 'Back on skipped words' : 'Skipped words waiting'}
+                </strong>
+                <p>
+                  {privateState?.returningSkippedWord
+                    ? 'Finish this returned word or send it to the back of the skipped queue.'
+                    : `${turn.pendingSkippedCount} skipped word(s) are waiting.`}
+                </p>
+                {!privateState?.returningSkippedWord ? (
+                  <div className="actions">
+                    <button
+                      className="secondary-action"
+                      disabled={pendingAction === 'return-skipped-word' || !privateState?.canReturnSkippedWord}
+                      onClick={() => sendGameAction(roomCode, 'return-skipped-word')}
+                    >
+                      Return to skipped word
+                    </button>
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
 
             <div className="actions actions--stretch">
               <button disabled={pendingAction === 'mark-correct'} onClick={() => sendGameAction(roomCode, 'mark-correct')}>
@@ -164,6 +188,19 @@ export function WhoWhatWherePlay({
               <strong>Keep guessing</strong>
               <p>Only the describer sees the word.</p>
             </div>
+
+            {turn?.pendingSkippedCount > 0 ? (
+              <div className="notice-card">
+                <strong>
+                  {turn?.returningSkippedWord ? 'Back on skipped words' : 'Skipped words waiting'}
+                </strong>
+                <p>
+                  {turn?.returningSkippedWord
+                    ? 'Your team is working back through an earlier skipped word.'
+                    : `${turn.pendingSkippedCount} skipped word(s) are queued to come back.`}
+                </p>
+              </div>
+            ) : null}
           </section>
         </div>
       );
