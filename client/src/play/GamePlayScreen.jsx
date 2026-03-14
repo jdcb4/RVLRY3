@@ -59,7 +59,6 @@ export function GamePlayScreen() {
     [roomState?.players]
   );
   const isHost = roomState?.hostId === playerId;
-  const gameplayLead = gameModule.gameplayLead;
   const ActiveGameplay = GAMEPLAY_COMPONENTS[gameModule.playVariant] ?? ImposterPlay;
 
   if (!roomState || roomState.code !== roomCode || roomState.phase !== 'in-progress') {
@@ -74,12 +73,6 @@ export function GamePlayScreen() {
 
   return (
     <main className="scene scene--gameplay">
-      <header className="scene__header scene__header--compact">
-        <p className="scene__eyebrow">{game.name} in play</p>
-        <h1 className="scene__title">Room {roomState.code}</h1>
-        <p className="scene__lead">{gameplayLead}</p>
-      </header>
-
       <ActiveGameplay
         roomCode={roomCode}
         roomState={roomState}

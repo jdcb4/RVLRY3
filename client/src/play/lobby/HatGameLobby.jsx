@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { InfoPopover } from '../../components/InfoPopover';
 import { InfoIcon, ShuffleIcon, UsersIcon } from '../../components/Icons';
 import { fetchHatGameSuggestions } from '../../games/contentApi';
 import { HATGAME_MAX_CLUE_LENGTH, buildTeamRosters } from './helpers';
@@ -119,6 +120,59 @@ export function HatGameLobby({
     <section className="panel panel--stacked">
       {error ? <p className="connection-banner connection-banner--error">{error}</p> : null}
 
+      <LobbyDisclosure
+        title="Your clues"
+        summary={`${savedCount} / ${requiredClues} saved on this device`}
+        icon={<InfoIcon />}
+        open={savedCount < requiredClues}
+      >
+        <div className="inline-heading">
+          <strong>Clue pack</strong>
+          <InfoPopover
+            label="Hat Game clue writing tips"
+            title="What belongs in a Hat Game clue pack?"
+          >
+            <ul className="compact-list">
+              <li>Write names most of the room should know, real or fictional.</li>
+              <li>Use one specific person per clue, not a group or category.</li>
+              <li>You should be able to explain why they are famous in five seconds.</li>
+              <li>Mix history, pop culture, athletes, and fictional characters.</li>
+            </ul>
+          </InfoPopover>
+        </div>
+
+        <div className="field-stack">
+          {clueDrafts.map((clue, index) => (
+            <label key={`hat-clue-${index}`} className="settings-field">
+              <span className="helper-text">Clue {index + 1}</span>
+              <input
+                value={clue}
+                maxLength={HATGAME_MAX_CLUE_LENGTH}
+                placeholder="Enter a person name"
+                onChange={(event) => handleClueChange(index, event.target.value)}
+              />
+            </label>
+          ))}
+        </div>
+
+        <div className="actions actions--stretch">
+          <button
+            className="secondary-action"
+            disabled={loadingSuggestions}
+            onClick={handleGenerateSuggestions}
+          >
+            {loadingSuggestions ? 'Loading suggestions' : 'Give me suggestions'}
+          </button>
+          <button disabled={pendingAction === 'submit-hat-clues'} onClick={handleSubmit}>
+            Save clues
+          </button>
+        </div>
+
+        {savedCount < requiredClues ? (
+          <p className="helper-text">Save every clue before you ready up.</p>
+        ) : null}
+      </LobbyDisclosure>
+
       <LobbyDisclosure title="Teams" summary={`${teamRosters.length} teams`} icon={<UsersIcon />}>
         <div className="team-grid">
           {teamRosters.map((team) => (
@@ -233,44 +287,6 @@ export function HatGameLobby({
         ) : (
           <LobbySettingList items={optionsList} />
         )}
-      </LobbyDisclosure>
-
-      <LobbyDisclosure
-        title="Your clues"
-        summary={`${savedCount} / ${requiredClues} saved on this device`}
-        icon={<InfoIcon />}
-        open={savedCount < requiredClues}
-      >
-        <div className="field-stack">
-          {clueDrafts.map((clue, index) => (
-            <label key={`hat-clue-${index}`} className="settings-field">
-              <span className="helper-text">Clue {index + 1}</span>
-              <input
-                value={clue}
-                maxLength={HATGAME_MAX_CLUE_LENGTH}
-                placeholder="Enter a person name"
-                onChange={(event) => handleClueChange(index, event.target.value)}
-              />
-            </label>
-          ))}
-        </div>
-
-        <div className="actions actions--stretch">
-          <button
-            className="secondary-action"
-            disabled={loadingSuggestions}
-            onClick={handleGenerateSuggestions}
-          >
-            {loadingSuggestions ? 'Loading suggestions' : 'Give me suggestions'}
-          </button>
-          <button disabled={pendingAction === 'submit-hat-clues'} onClick={handleSubmit}>
-            Save clues
-          </button>
-        </div>
-
-        {savedCount < requiredClues ? (
-          <p className="helper-text">Save every clue before you ready up.</p>
-        ) : null}
       </LobbyDisclosure>
     </section>
   );

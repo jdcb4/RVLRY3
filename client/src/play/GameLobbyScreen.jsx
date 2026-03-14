@@ -221,21 +221,14 @@ export function GameLobbyScreen() {
 
   return (
     <main className="scene scene--lobby">
-      <header className="scene__header scene__header--compact scene__header--with-back">
-        <div className="scene__header-row">
-          <Link aria-label="Back to game setup" className="scene__back scene__back--icon" to={`/play/${game.id}`}>
-            <ArrowLeftIcon />
-          </Link>
-        </div>
-        <h1 className="scene__title scene__title--lobby">LOBBY</h1>
-      </header>
+      <div className="scene__header-row">
+        <Link aria-label="Back to game setup" className="scene__back scene__back--icon" to={`/play/${game.id}`}>
+          <ArrowLeftIcon />
+        </Link>
+      </div>
 
       <div className="panel-grid panel-grid--lobby">
         <section className="panel panel--hero panel--stacked">
-          <div className="panel-heading">
-            <h2>Invite</h2>
-          </div>
-
           <div className="room-code-card room-code-card--bare">
             <strong className="room-code-card__value">{roomState.code}</strong>
           </div>

@@ -189,7 +189,7 @@ export function HatGameLocalView({
               <strong>Best turn</strong>
               <p>
                 {session.results.bestTurn.describerName} scored {session.results.bestTurn.score}{' '}
-                for {session.results.bestTurn.teamName} in {session.results.bestTurn.phaseName}.
+                for {session.results.bestTurn.teamName}.
               </p>
             </div>
           ) : null}

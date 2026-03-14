@@ -80,6 +80,38 @@ const collectClueQueue = (game, rng) =>
     rng
   );
 
+const advanceHatGamePhaseWithinTurn = (game, activeTurn, rng) => {
+  if (activeTurn.skippedCluePoolIndex !== null) {
+    return { error: 'Bring the skipped clue back before moving to the next phase' };
+  }
+
+  const nextPhaseNumber = Math.min(game.phaseNumber + 1, 3);
+  const nextQueue = shuffleArray(
+    game.cluePool.map((clue, index) => ({
+      ...clue,
+      poolIndex: index
+    })),
+    rng
+  );
+
+  if (nextQueue.length === 0) {
+    return { error: 'No clues are available for the next phase' };
+  }
+
+  return {
+    ...game,
+    phaseNumber: nextPhaseNumber,
+    usedCluePoolIndices: [],
+    activeTurn: {
+      ...activeTurn,
+      clueQueue: nextQueue,
+      queueIndex: 0,
+      skippedCluePoolIndex: null,
+      skippedClueText: null
+    }
+  };
+};
+
 const buildHatGameResults = (game) => {
   const leaderboard = buildLeaderboard(game.teams);
   const topScore = leaderboard[0]?.score ?? 0;
@@ -342,6 +374,17 @@ export const applyHatGameAction = (
   }
 
   if (!activeTurn.clueQueue[activeTurn.queueIndex]) {
+    if (game.phaseNumber < 3) {
+      return advanceHatGamePhaseWithinTurn(
+        {
+          ...game,
+          activeTurn
+        },
+        activeTurn,
+        rng
+      );
+    }
+
     return finishHatGameTurn(
       {
         ...game,

@@ -4,10 +4,11 @@ import {
   LeaderboardList,
   SummaryChips,
   TeamScoreboard,
+  TeamTurnOrder,
   TurnSummaryPanel
 } from '../../components/gameplay/SharedGameUi';
 import { formatCountdown, getCountdownSeconds } from '../../games/timedTurns';
-import { buildTeamRosters, EMPTY_TEAMS, getTeamById } from './helpers';
+import { buildActiveTeamOrder, buildTeamRosters, EMPTY_TEAMS, getTeamById } from './helpers';
 import {
   ResultsActions
 } from './common';
@@ -28,8 +29,11 @@ export function WhoWhatWherePlay({
   const turn = publicState?.turn;
   const teams = roomState.teams ?? EMPTY_TEAMS;
   const teamRosters = useMemo(() => buildTeamRosters(teams, roomState.players), [roomState.players, teams]);
+  const activeTeamOrder = useMemo(
+    () => buildActiveTeamOrder(teamRosters, publicState.activeTeamId),
+    [publicState.activeTeamId, teamRosters]
+  );
   const activeTeam = getTeamById(teams, publicState.activeTeamId);
-  const myTeam = getTeamById(teams, privateState?.teamId);
   const [secondsRemaining, setSecondsRemaining] = useState(() => getCountdownSeconds(turn?.endsAt));
   const autoEndRef = useRef('');
 
@@ -189,6 +193,12 @@ export function WhoWhatWherePlay({
             <strong>Wait for your team&apos;s turn</strong>
             <p>The word stays hidden until your turn.</p>
           </div>
+
+          <TeamTurnOrder
+            teams={activeTeamOrder}
+            activeTeamId={publicState.activeTeamId}
+            activeDescriberName={publicState.activeDescriberName}
+          />
         </section>
       </div>
     );
@@ -259,10 +269,11 @@ export function WhoWhatWherePlay({
             <p>Stay ready for the countdown.</p>
           </div>
         ) : (
-          <div className="notice-card">
-            <strong>{activeTeam?.name ?? 'The next team'} is preparing</strong>
-            <p>You are waiting until it is {myTeam?.name ?? 'your'} team&apos;s turn.</p>
-          </div>
+          <TeamTurnOrder
+            teams={activeTeamOrder}
+            activeTeamId={publicState.activeTeamId}
+            activeDescriberName={publicState.activeDescriberName}
+          />
         )}
       </section>
 

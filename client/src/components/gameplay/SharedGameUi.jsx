@@ -63,6 +63,53 @@ export function TeamScoreboard({
   );
 }
 
+export function TeamTurnOrder({
+  title = 'Turn order',
+  teams,
+  activeDescriberName = null
+}) {
+  if (!teams?.length) {
+    return null;
+  }
+
+  return (
+    <div className="turn-order">
+      <div className="panel-heading">
+        <h3>{title}</h3>
+      </div>
+      <ul className="player-list">
+        {teams.map((team, index) => (
+          <li
+            key={team.id}
+            aria-current={index === 0 ? 'step' : undefined}
+            className={`player-row player-row--compact ${index === 0 ? 'player-row--active' : ''}`}
+          >
+            <div className="player-row__identity">
+              <span className="player-row__name">{team.name}</span>
+              <span className="helper-text">
+                {index === 0
+                  ? activeDescriberName
+                    ? `${activeDescriberName} is up now`
+                    : 'Active team'
+                  : index === 1
+                    ? 'Next up'
+                    : 'Later in the round'}
+              </span>
+            </div>
+            <div className="turn-order__meta">
+              {index === 0 ? (
+                <span className="badge badge--ready">Now</span>
+              ) : index === 1 ? (
+                <span className="badge">Next</span>
+              ) : null}
+            </div>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 export function LeaderboardList({ leaderboard, winnerTeamIds = [] }) {
   return (
     <ul className="player-list">

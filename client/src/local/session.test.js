@@ -162,16 +162,19 @@ describe('local pass-and-play session engine', () => {
 
     expect(getWhoWhatWhereContext(session).activeTeamPlayers).toHaveLength(2);
 
-    for (let phaseNumber = 1; phaseNumber <= 3; phaseNumber += 1) {
-      expect(session.phaseNumber).toBe(phaseNumber);
+    let usedSkipReturn = false;
 
-      session = applyLocalAction(session, {
-        type: 'start-turn',
-        payload: {}
-      });
+    while (session.stage !== 'results') {
+      if (session.stage === 'ready') {
+        session = applyLocalAction(session, {
+          type: 'start-turn',
+          payload: {}
+        });
+        continue;
+      }
 
-      if (phaseNumber === 1) {
-        const skippedClue = session.activeTurn.clueQueue[0].text;
+      if (!usedSkipReturn && session.activeTurn?.skippedCluePoolIndex === null) {
+        const skippedClue = session.activeTurn.clueQueue[session.activeTurn.queueIndex].text;
         session = applyLocalAction(session, { type: 'skip-clue' });
         expect(session.activeTurn.skippedClueText).toBe(skippedClue);
         expect(session.activeTurn.clueQueue[session.activeTurn.queueIndex].text).not.toBe(
@@ -180,20 +183,117 @@ describe('local pass-and-play session engine', () => {
 
         session = applyLocalAction(session, { type: 'return-skipped-clue' });
         expect(session.activeTurn.clueQueue[session.activeTurn.queueIndex].text).toBe(skippedClue);
+        usedSkipReturn = true;
+        continue;
       }
 
-      while (session.stage === 'turn') {
-        session = applyLocalAction(session, { type: 'mark-correct' });
-      }
+      session = applyLocalAction(session, { type: 'mark-correct' });
     }
 
     expect(session.stage).toBe('results');
     expect(session.results.totalClues).toBe(12);
     expect(session.results.leaderboard).toHaveLength(2);
-    expect(session.results.bestTurn).toMatchObject({
-      phaseNumber: 1,
-      phaseName: 'Describe',
-      score: 12
+    expect(session.results.bestTurn.teamName).toBeTruthy();
+    expect(session.results.bestTurn.describerName).toBeTruthy();
+    expect(session.results.bestTurn.score).toBeGreaterThan(0);
+  });
+
+  it('rolls HatGame into the next phase without resetting the turn timer', () => {
+    const players = rebalanceWhoWhatWherePlayers(createLocalPlayers(4), 2);
+    const settings = {
+      ...DEFAULT_LOCAL_HATGAME_SETTINGS,
+      teamCount: 2,
+      cluesPerPlayer: 1
+    };
+
+    let session = buildLocalSession({
+      gameId: 'hatgame',
+      players,
+      settings,
+      lobbyState: {
+        clueSubmissions: {
+          [players[0].id]: { clues: ['Albert Einstein'] },
+          [players[1].id]: { clues: ['Beyonce'] },
+          [players[2].id]: { clues: ['Spider-Man'] },
+          [players[3].id]: { clues: ['Batman'] }
+        }
+      },
+      rng: () => 0.5
     });
+
+    session = applyLocalAction(session, {
+      type: 'start-turn',
+      payload: {}
+    });
+    const turnEndsAt = session.activeTurn.endsAt;
+
+    for (let index = 0; index < 4; index += 1) {
+      session = applyLocalAction(session, { type: 'mark-correct' });
+    }
+
+    expect(session.stage).toBe('turn');
+    expect(session.phaseNumber).toBe(2);
+    expect(session.activeTurn.endsAt).toBe(turnEndsAt);
+
+    for (let index = 0; index < 4; index += 1) {
+      session = applyLocalAction(session, { type: 'mark-correct' });
+    }
+
+    expect(session.stage).toBe('turn');
+    expect(session.phaseNumber).toBe(3);
+    expect(session.activeTurn.endsAt).toBe(turnEndsAt);
+
+    for (let index = 0; index < 4; index += 1) {
+      session = applyLocalAction(session, { type: 'mark-correct' });
+    }
+
+    expect(session.stage).toBe('results');
+  });
+
+  it('returns skipped and unfinished HatGame clues to the pool on the next turn', () => {
+    const players = rebalanceWhoWhatWherePlayers(createLocalPlayers(4), 2);
+    const settings = {
+      ...DEFAULT_LOCAL_HATGAME_SETTINGS,
+      teamCount: 2,
+      cluesPerPlayer: 1
+    };
+
+    let session = buildLocalSession({
+      gameId: 'hatgame',
+      players,
+      settings,
+      lobbyState: {
+        clueSubmissions: {
+          [players[0].id]: { clues: ['Albert Einstein'] },
+          [players[1].id]: { clues: ['Beyonce'] },
+          [players[2].id]: { clues: ['Spider-Man'] },
+          [players[3].id]: { clues: ['Batman'] }
+        }
+      },
+      rng: () => 0.5
+    });
+
+    session = applyLocalAction(session, {
+      type: 'start-turn',
+      payload: {}
+    });
+
+    const initialQueue = session.activeTurn.clueQueue.map((clue) => clue.text);
+    session = applyLocalAction(session, { type: 'mark-correct' });
+    const skippedClue = session.activeTurn.clueQueue[session.activeTurn.queueIndex].text;
+    const unfinishedClue = session.activeTurn.clueQueue[session.activeTurn.queueIndex + 1].text;
+
+    session = applyLocalAction(session, { type: 'skip-clue' });
+    session = applyLocalAction(session, { type: 'end-turn' });
+    session = applyLocalAction(session, {
+      type: 'start-turn',
+      payload: {}
+    });
+
+    const nextQueue = session.activeTurn.clueQueue.map((clue) => clue.text);
+
+    expect(nextQueue).toContain(skippedClue);
+    expect(nextQueue).toContain(unfinishedClue);
+    expect(nextQueue).not.toContain(initialQueue[0]);
   });
 });

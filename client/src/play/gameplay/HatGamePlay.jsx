@@ -1,17 +1,45 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useAudioCues } from '../../audio/AudioCueContext';
 import { useStageCue, useTimedTurnAudio } from '../../audio/useGameAudio';
+import { InfoPopover } from '../../components/InfoPopover';
 import {
   LeaderboardList,
   SummaryChips,
   TeamScoreboard,
+  TeamTurnOrder,
   TurnSummaryPanel
 } from '../../components/gameplay/SharedGameUi';
 import { formatCountdown, getCountdownSeconds } from '../../games/timedTurns';
-import { buildTeamRosters, EMPTY_TEAMS, getTeamById } from './helpers';
-import {
-  ResultsActions
-} from './common';
+import { buildActiveTeamOrder, buildTeamRosters, EMPTY_TEAMS, getTeamById } from './helpers';
+import { ResultsActions } from './common';
+
+function PhaseRuleCard({ phaseName, phaseInstruction }) {
+  return (
+    <div className="turn-hero__score">
+      <div className="stat-card__topline">
+        <span className="helper-text">Rule</span>
+        <InfoPopover
+          align="left"
+          label={`What does ${phaseName} mean?`}
+          title={phaseName}
+        >
+          <p>{phaseInstruction}</p>
+        </InfoPopover>
+      </div>
+      <strong className="stat-card__value">{phaseName}</strong>
+    </div>
+  );
+}
+
+function RoleStatusCard({ title, description }) {
+  return (
+    <div className="role-card">
+      <span className="helper-text">Role</span>
+      <strong className="role-card__title">{title}</strong>
+      <span className="role-card__body">{description}</span>
+    </div>
+  );
+}
 
 export function HatGamePlay({
   roomCode,
@@ -29,10 +57,18 @@ export function HatGamePlay({
   const results = publicState?.results;
   const turn = publicState?.turn;
   const teams = roomState.teams ?? EMPTY_TEAMS;
-  const teamRosters = useMemo(() => buildTeamRosters(teams, roomState.players), [roomState.players, teams]);
+  const teamRosters = useMemo(
+    () => buildTeamRosters(teams, roomState.players),
+    [roomState.players, teams]
+  );
   const activeTeam = getTeamById(teams, publicState.activeTeamId);
-  const myTeam = getTeamById(teams, privateState?.teamId);
-  const [secondsRemaining, setSecondsRemaining] = useState(() => getCountdownSeconds(turn?.endsAt));
+  const activeTeamOrder = useMemo(
+    () => buildActiveTeamOrder(teamRosters, publicState.activeTeamId),
+    [publicState.activeTeamId, teamRosters]
+  );
+  const [secondsRemaining, setSecondsRemaining] = useState(() =>
+    getCountdownSeconds(turn?.endsAt)
+  );
   const autoEndRef = useRef('');
   const previousPhaseRef = useRef(publicState?.phaseNumber ?? 1);
 
@@ -95,7 +131,7 @@ export function HatGamePlay({
                 Phase {publicState.phaseNumber}: {publicState.phaseName}
               </p>
               <h2>You are describing</h2>
-              <p>{publicState.phaseInstruction}</p>
+              <p>{activeTeam?.name ?? 'Your team'} are live.</p>
             </div>
 
             <div className="turn-hero">
@@ -103,15 +139,10 @@ export function HatGamePlay({
                 <span className="helper-text">Time left</span>
                 <strong>{formatCountdown(secondsRemaining)}</strong>
               </div>
-              <div className="turn-hero__score">
-                <span className="helper-text">Skips left</span>
-                <strong>{privateState?.skipsRemaining ?? turn?.skipsRemaining ?? 0}</strong>
-              </div>
-            </div>
-
-            <div className="notice-card notice-card--focus">
-              <strong>Current rule</strong>
-              <p>{publicState.phaseInstruction}</p>
+              <PhaseRuleCard
+                phaseName={publicState.phaseName}
+                phaseInstruction={publicState.phaseInstruction}
+              />
             </div>
 
             <div className="role-card">
@@ -124,14 +155,17 @@ export function HatGamePlay({
               items={[
                 { label: 'Team', value: activeTeam?.name ?? 'Team' },
                 { label: 'Turn score', value: turn?.score ?? 0 },
-                { label: 'Correct', value: turn?.correctCount ?? 0 }
+                { label: 'Skips left', value: privateState?.skipsRemaining ?? turn?.skipsRemaining ?? 0 }
               ]}
             />
 
-            {privateState?.skippedCluePending && (
+            {privateState?.skippedCluePending ? (
               <div className="notice-card notice-card--focus">
                 <strong>Skipped clue waiting</strong>
-                <p>{privateState?.skippedClueText ?? 'Bring the skipped clue back before you skip again.'}</p>
+                <p>
+                  {privateState?.skippedClueText ??
+                    'Bring the skipped clue back before you skip again.'}
+                </p>
                 <div className="actions">
                   <button
                     className="secondary-action"
@@ -144,10 +178,13 @@ export function HatGamePlay({
                   </button>
                 </div>
               </div>
-            )}
+            ) : null}
 
             <div className="actions actions--stretch">
-              <button disabled={pendingAction === 'mark-correct'} onClick={() => sendGameAction(roomCode, 'mark-correct')}>
+              <button
+                disabled={pendingAction === 'mark-correct'}
+                onClick={() => sendGameAction(roomCode, 'mark-correct')}
+              >
                 Correct
               </button>
               <button
@@ -178,8 +215,8 @@ export function HatGamePlay({
               <p className="status-pill">
                 Phase {publicState.phaseNumber}: {publicState.phaseName}
               </p>
-              <h2>You are guessing</h2>
-              <p>{publicState.activeDescriberName} is describing for {activeTeam?.name ?? 'your team'}.</p>
+              <h2>{activeTeam?.name ?? 'Your team'} are live</h2>
+              <p>{publicState.activeDescriberName} is describing for your team.</p>
             </div>
 
             <div className="turn-hero">
@@ -187,23 +224,23 @@ export function HatGamePlay({
                 <span className="helper-text">Time left</span>
                 <strong>{formatCountdown(secondsRemaining)}</strong>
               </div>
-              <div className="turn-hero__score">
-                <span className="helper-text">Rule</span>
-                <strong>{publicState.phaseName}</strong>
-              </div>
+              <PhaseRuleCard
+                phaseName={publicState.phaseName}
+                phaseInstruction={publicState.phaseInstruction}
+              />
             </div>
 
-            <div className="notice-card notice-card--focus">
-              <strong>Current rule</strong>
-              <p>{publicState.phaseInstruction}</p>
-            </div>
+            <RoleStatusCard
+              title="Guessing"
+              description="Call names out loud while the describer keeps the cards moving."
+            />
 
-            {turn?.skippedCluePending && (
+            {turn?.skippedCluePending ? (
               <div className="notice-card">
                 <strong>Skipped clue waiting</strong>
-                <p>The describer needs to circle back before another skip.</p>
+                <p>The describer has to circle back before another skip.</p>
               </div>
-            )}
+            ) : null}
           </section>
         </div>
       );
@@ -216,7 +253,7 @@ export function HatGamePlay({
             <p className="status-pill">
               Phase {publicState.phaseNumber}: {publicState.phaseName}
             </p>
-            <h2>You are waiting</h2>
+            <h2>Wait for your team</h2>
             <p>{publicState.activeDescriberName} is describing for {activeTeam?.name ?? 'the active team'}.</p>
           </div>
 
@@ -225,16 +262,17 @@ export function HatGamePlay({
               <span className="helper-text">Time left</span>
               <strong>{formatCountdown(secondsRemaining)}</strong>
             </div>
-            <div className="turn-hero__score">
-              <span className="helper-text">Rule</span>
-              <strong>{publicState.phaseName}</strong>
-            </div>
+            <PhaseRuleCard
+              phaseName={publicState.phaseName}
+              phaseInstruction={publicState.phaseInstruction}
+            />
           </div>
 
-          <div className="notice-card">
-            <strong>Watch the round and stay ready</strong>
-            <p>{publicState.phaseInstruction}</p>
-          </div>
+          <TeamTurnOrder
+            teams={activeTeamOrder}
+            activeTeamId={publicState.activeTeamId}
+            activeDescriberName={publicState.activeDescriberName}
+          />
         </section>
       </div>
     );
@@ -267,7 +305,7 @@ export function HatGamePlay({
               <strong>Best turn</strong>
               <p>
                 {results.bestTurn.describerName} scored {results.bestTurn.score} for{' '}
-                {results.bestTurn.teamName} in {results.bestTurn.phaseName}.
+                {results.bestTurn.teamName}.
               </p>
             </div>
           ) : null}
@@ -295,26 +333,38 @@ export function HatGamePlay({
           <p className="status-pill">
             Phase {publicState.phaseNumber}: {publicState.phaseName}
           </p>
-          <h2>{privateState?.canStartTurn ? 'Your team is up' : 'Next team up'}</h2>
+          <h2>
+            {privateState?.canStartTurn
+              ? 'Your team is up'
+              : privateState?.isActiveTeam
+                ? 'Your team is up next'
+                : 'Next team up'}
+          </h2>
           <p>
-            {activeTeam?.name ?? 'Next team'} will go next, with {publicState.activeDescriberName} describing.
+            {activeTeam?.name ?? 'Next team'} will go next, with {publicState.activeDescriberName}{' '}
+            describing.
           </p>
+        </div>
+
+        <div className="turn-hero">
+          <div className="turn-hero__clock">
+            <span className="helper-text">Turn length</span>
+            <strong>{roomState.settings?.turnDurationSeconds ?? 45}s</strong>
+          </div>
+          <PhaseRuleCard
+            phaseName={publicState.phaseName}
+            phaseInstruction={publicState.phaseInstruction}
+          />
         </div>
 
         <SummaryChips
           items={[
-            { label: 'Phase', value: publicState.phaseName ?? 'Describe' },
             { label: 'Next team', value: activeTeam?.name ?? 'Waiting' },
             { label: 'Describer', value: publicState.activeDescriberName ?? 'Waiting' }
           ]}
         />
 
-        <div className="notice-card notice-card--focus">
-          <strong>Current rule</strong>
-          <p>{publicState.phaseInstruction}</p>
-        </div>
-
-        {publicState.lastTurnSummary?.phaseCompleted && (
+        {publicState.lastTurnSummary?.phaseCompleted ? (
           <div className="notice-card notice-card--focus">
             <strong>Phase {publicState.lastTurnSummary.completedPhaseNumber} complete</strong>
             <p>
@@ -323,28 +373,32 @@ export function HatGamePlay({
                 : 'That was the final phase.'}
             </p>
           </div>
-        )}
+        ) : null}
 
         {privateState?.canStartTurn ? (
           <div className="field-stack">
             <div className="notice-card">
               <strong>Get your team ready</strong>
-              <p>Start only when your team is listening and the describer has the device.</p>
+              <p>Start when the describer has the phone and the guessers are listening.</p>
             </div>
-            <button disabled={pendingAction === 'start-turn'} onClick={() => sendGameAction(roomCode, 'start-turn')}>
+            <button
+              disabled={pendingAction === 'start-turn'}
+              onClick={() => sendGameAction(roomCode, 'start-turn')}
+            >
               Start turn
             </button>
           </div>
         ) : privateState?.isActiveTeam ? (
-          <div className="notice-card">
-            <strong>Your team is on deck</strong>
-            <p>Stay close for the next clue.</p>
-          </div>
+          <RoleStatusCard
+            title="Guessing"
+            description="Stay close. Your team is about to guess the next phase."
+          />
         ) : (
-          <div className="notice-card">
-            <strong>{activeTeam?.name ?? 'The next team'} is preparing</strong>
-            <p>You are waiting until it is {myTeam?.name ?? 'your'} team&apos;s turn.</p>
-          </div>
+          <TeamTurnOrder
+            teams={activeTeamOrder}
+            activeTeamId={publicState.activeTeamId}
+            activeDescriberName={publicState.activeDescriberName}
+          />
         )}
       </section>
 

@@ -362,6 +362,12 @@ describe('play UI', () => {
     expect(screen.getByRole('button', { name: 'Edit Team Alpha' })).toBeTruthy();
     expect(screen.getByRole('img', { name: 'Alex ready' })).toBeTruthy();
 
+    await user.click(screen.getByLabelText('Hat Game clue writing tips'));
+
+    expect(
+      screen.getByText('Write names most of the room should know, real or fictional.')
+    ).toBeTruthy();
+
     await user.click(screen.getByRole('button', { name: 'Remove Drew' }));
 
     expect(kickPlayer).toHaveBeenCalledWith('ROOM42', 'p4');
@@ -426,7 +432,7 @@ describe('play UI', () => {
     expect(screen.getByText('Latest turn')).toBeTruthy();
   });
 
-  it('shows HatGame rules separately from the clue card and lets the describer return skipped clues', async () => {
+  it('hides HatGame rule details behind an info popover and lets the describer return skipped clues', async () => {
     const user = userEvent.setup();
     const sendGameAction = vi.fn();
 
@@ -482,21 +488,21 @@ describe('play UI', () => {
       />
     );
 
-    const currentRuleCard = screen.getByText('Current rule').closest('.notice-card');
     const currentClueCard = screen.getByText('Current clue').closest('.role-card');
+    const ruleInfoButton = screen.getByLabelText('What does Describe mean?');
 
-    expect(currentRuleCard).toBeTruthy();
-    expect(
-      within(currentRuleCard).getByText(
-        'Use as many words as you want, but do not say any part of the name.'
-      )
-    ).toBeTruthy();
     expect(currentClueCard).toBeTruthy();
     expect(
       within(currentClueCard).queryByText(
         'Use as many words as you want, but do not say any part of the name.'
       )
     ).toBeNull();
+
+    await user.click(ruleInfoButton);
+
+    expect(
+      screen.getByText('Use as many words as you want, but do not say any part of the name.')
+    ).toBeTruthy();
     expect(screen.queryByText('A skipped clue must come back before you can skip again.')).toBeNull();
 
     await user.click(screen.getByRole('button', { name: 'Go back to skipped clue' }));
