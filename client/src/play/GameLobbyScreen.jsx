@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import { useAudioCues } from '../audio/AudioCueContext';
-import { ArrowLeftIcon, ShareIcon } from '../components/Icons';
+import { ShareIcon } from '../components/Icons';
 import { getGameModule } from '../games/registry';
 import { buildInviteLink, getStartHint } from './lobby/helpers';
 import { LOBBY_COMPONENTS } from './lobby';
@@ -221,12 +221,6 @@ export function GameLobbyScreen() {
 
   return (
     <main className="scene scene--lobby">
-      <div className="scene__header-row">
-        <Link aria-label="Back to game setup" className="scene__back scene__back--icon" to={`/play/${game.id}`}>
-          <ArrowLeftIcon />
-        </Link>
-      </div>
-
       <div className="panel-grid panel-grid--lobby">
         <section className="panel panel--hero panel--stacked">
           <div className="room-code-card room-code-card--bare">
@@ -284,25 +278,27 @@ export function GameLobbyScreen() {
         />
       </div>
 
-      <div className="action-bar action-bar--actions-only">
-        <div className="action-bar__actions">
-          <button
-            disabled={
-              !currentPlayer ||
-              pendingAction === 'ready' ||
-              (!currentPlayer?.ready && !canReadyUp)
-            }
-            onClick={handleReadyToggle}
-          >
-            {currentPlayer?.ready ? 'Unready' : 'Ready'}
-          </button>
-          {isHost && (
-            <button disabled={pendingAction === 'start' || Boolean(startHint)} onClick={handleStartGame}>
-              Start
+      <div className="lobby-action-dock">
+        <div className="action-bar action-bar--dock">
+          <div className="action-bar__actions">
+            <button
+              disabled={
+                !currentPlayer ||
+                pendingAction === 'ready' ||
+                (!currentPlayer?.ready && !canReadyUp)
+              }
+              onClick={handleReadyToggle}
+            >
+              {currentPlayer?.ready ? 'Unready' : 'Ready'}
             </button>
-          )}
+            {isHost && (
+              <button disabled={pendingAction === 'start' || Boolean(startHint)} onClick={handleStartGame}>
+                Start
+              </button>
+            )}
+          </div>
+          <p className="helper-text action-bar__hint">{readyHint}</p>
         </div>
-        <p className="helper-text">{readyHint}</p>
       </div>
     </main>
   );

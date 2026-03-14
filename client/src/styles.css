@@ -167,6 +167,13 @@ summary:focus-visible {
   backdrop-filter: blur(16px);
 }
 
+.topbar__leading {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  min-width: 0;
+}
+
 .topbar__brand {
   font-family: 'Fraunces', Georgia, serif;
   font-size: 1.2rem;
@@ -240,7 +247,8 @@ summary:focus-visible {
 }
 
 .scene--lobby {
-  padding-bottom: calc(8rem + env(safe-area-inset-bottom, 0px));
+  position: relative;
+  padding-bottom: calc(10rem + env(safe-area-inset-bottom, 0px));
 }
 
 .hub-hero,
@@ -653,24 +661,38 @@ summary:focus-visible {
   background: rgba(255, 255, 255, 0.08);
 }
 
+.info-popover__backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 34;
+  border: 0;
+  background: rgba(4, 13, 16, 0.58);
+  cursor: pointer;
+}
+
 .info-popover__panel {
-  position: absolute;
-  top: calc(100% + 0.5rem);
-  right: 0;
+  position: fixed;
+  top: 50%;
+  left: 50%;
   z-index: 35;
   display: grid;
   gap: 0.55rem;
-  width: min(22rem, calc(100vw - 1.5rem));
+  width: min(24rem, calc(100vw - 1.5rem));
+  max-height: min(70vh, 32rem);
+  overflow: auto;
   padding: 0.9rem 1rem;
   border-radius: 18px;
   border: 1px solid rgba(255, 138, 91, 0.24);
   background: rgba(9, 25, 29, 0.98);
   box-shadow: 0 18px 36px rgba(0, 0, 0, 0.28);
+  transform: translate(-50%, -50%);
 }
 
-.info-popover--left .info-popover__panel {
-  right: auto;
-  left: 0;
+.info-popover__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
 }
 
 .info-popover__body {
@@ -881,6 +903,33 @@ summary:focus-visible {
   font-family: 'Fraunces', Georgia, serif;
 }
 
+.role-card--word {
+  transition:
+    background 180ms ease,
+    border-color 180ms ease,
+    box-shadow 180ms ease;
+}
+
+.role-card--word-describe {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.role-card--word-one-word {
+  border-color: rgba(255, 198, 92, 0.22);
+  background:
+    linear-gradient(180deg, rgba(255, 198, 92, 0.16), rgba(255, 198, 92, 0.05)),
+    rgba(255, 255, 255, 0.03);
+  box-shadow: inset 0 0 0 1px rgba(255, 198, 92, 0.08);
+}
+
+.role-card--word-charades {
+  border-color: rgba(126, 216, 177, 0.22);
+  background:
+    linear-gradient(180deg, rgba(126, 216, 177, 0.18), rgba(96, 178, 255, 0.08)),
+    rgba(255, 255, 255, 0.03);
+  box-shadow: inset 0 0 0 1px rgba(126, 216, 177, 0.08);
+}
+
 .role-card__title {
   font-size: clamp(1.5rem, 6vw, 2.3rem);
   line-height: 1.05;
@@ -1028,7 +1077,7 @@ summary:focus-visible {
 .toast {
   position: fixed;
   left: 50%;
-  bottom: calc(6.5rem + env(safe-area-inset-bottom, 0px));
+  bottom: calc(7.5rem + env(safe-area-inset-bottom, 0px));
   z-index: 30;
   width: min(calc(100% - 1rem), 26rem);
   margin: 0;
@@ -1078,6 +1127,26 @@ summary:focus-visible {
   backdrop-filter: blur(14px);
 }
 
+.lobby-action-dock {
+  position: fixed;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 18;
+  padding: 2rem 0 max(0.75rem, env(safe-area-inset-bottom, 0px));
+  background: linear-gradient(180deg, rgba(13, 27, 30, 0), rgba(13, 27, 30, 0.88) 36%, #0d1b1e 100%);
+  pointer-events: none;
+}
+
+.action-bar--dock {
+  position: relative;
+  bottom: auto;
+  width: min(1040px, calc(100% - 1rem));
+  margin: 0 auto;
+  justify-content: space-between;
+  pointer-events: auto;
+}
+
 .action-bar--static {
   position: static;
   margin-top: 0;
@@ -1109,6 +1178,12 @@ summary:focus-visible {
 
 .action-bar__actions > * {
   flex: 1 1 11rem;
+}
+
+.action-bar__hint {
+  flex: 1 1 16rem;
+  max-width: 32rem;
+  text-align: right;
 }
 
 .gameplay-stack {
@@ -1301,6 +1376,10 @@ summary:focus-visible {
     gap: 0.6rem;
   }
 
+  .topbar__leading {
+    gap: 0.55rem;
+  }
+
   .topbar__meta {
     gap: 0.45rem;
   }
@@ -1317,6 +1396,11 @@ summary:focus-visible {
 
   .actions--compact > * {
     width: auto;
+  }
+
+  .action-bar__hint {
+    max-width: none;
+    text-align: left;
   }
 }
 

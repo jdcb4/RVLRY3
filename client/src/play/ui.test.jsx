@@ -492,6 +492,8 @@ describe('play UI', () => {
     const ruleInfoButton = screen.getByLabelText('What does Describe mean?');
 
     expect(currentClueCard).toBeTruthy();
+    expect(currentClueCard.className).toContain('role-card--word-describe');
+    expect(screen.queryByText('Phase 1: Describe')).toBeNull();
     expect(
       within(currentClueCard).queryByText(
         'Use as many words as you want, but do not say any part of the name.'
@@ -508,5 +510,54 @@ describe('play UI', () => {
     await user.click(screen.getByRole('button', { name: 'Go back to skipped clue' }));
 
     expect(sendGameAction).toHaveBeenCalledWith('ROOM42', 'return-skipped-clue');
+  });
+
+  it('shows the active HatGame guessers that they are up now before the turn starts', () => {
+    render(
+      <HatGamePlay
+        roomCode="ROOM42"
+        roomState={{
+          hostId: 'p1',
+          settings: {
+            turnDurationSeconds: 45
+          },
+          players: [
+            { id: 'p1', name: 'Alex', teamId: 'team-1' },
+            { id: 'p2', name: 'Blair', teamId: 'team-1' },
+            { id: 'p3', name: 'Casey', teamId: 'team-2' },
+            { id: 'p4', name: 'Drew', teamId: 'team-2' }
+          ],
+          teams: [
+            { id: 'team-1', name: 'Team 1', score: 2 },
+            { id: 'team-2', name: 'Team 2', score: 1 }
+          ],
+          gamePublicState: {
+            stage: 'ready',
+            roundNumber: 1,
+            phaseNumber: 2,
+            phaseName: 'One Word',
+            phaseInstruction: 'Say exactly one word only. No gestures.',
+            activeTeamId: 'team-1',
+            activeDescriberId: 'p1',
+            activeDescriberName: 'Alex'
+          }
+        }}
+        privateState={{
+          teamId: 'team-1',
+          isActiveTeam: true,
+          canStartTurn: false
+        }}
+        playerId="p2"
+        isHost={false}
+        pendingAction=""
+        sendGameAction={vi.fn()}
+        returnRoomToLobby={vi.fn()}
+      />
+    );
+
+    expect(screen.getByRole('heading', { name: "You're up now" })).toBeTruthy();
+    expect(screen.getAllByText('Waiting for Alex to start the turn.')).toHaveLength(2);
+    expect(screen.queryByText('Phase 2: One Word')).toBeNull();
+    expect(screen.getByText('Guessing')).toBeTruthy();
   });
 });

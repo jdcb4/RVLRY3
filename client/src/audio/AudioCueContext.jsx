@@ -1,5 +1,7 @@
 /* eslint-disable react-refresh/only-export-components */
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import oneWordPhaseVoiceUrl from './assets/OneWord.wav';
+import charadesPhaseVoiceUrl from './assets/Charades.wav';
 
 const AUDIO_ENABLED_STORAGE_KEY = 'rvlry.audioEnabled';
 const AudioCueContext = createContext(null);
@@ -64,7 +66,43 @@ const CUE_PATTERNS = {
   ],
   submit: [
     { at: 0, duration: 0.05, frequency: 880, type: 'triangle', gain: 0.022 }
+  ],
+  'hatgame-phase-one-word': [
+    { at: 0, duration: 0.08, frequency: 523.25, type: 'triangle', gain: 0.03 },
+    { at: 0.1, duration: 0.08, frequency: 659.25, type: 'triangle', gain: 0.034 },
+    { at: 0.2, duration: 0.12, frequency: 783.99, type: 'triangle', gain: 0.04 }
+  ],
+  'hatgame-phase-charades': [
+    { at: 0, duration: 0.08, frequency: 523.25, type: 'triangle', gain: 0.03 },
+    { at: 0.1, duration: 0.08, frequency: 659.25, type: 'triangle', gain: 0.034 },
+    { at: 0.2, duration: 0.12, frequency: 783.99, type: 'triangle', gain: 0.04 }
   ]
+};
+
+const SAMPLE_CUES = {
+  'hatgame-phase-one-word': oneWordPhaseVoiceUrl,
+  'hatgame-phase-charades': charadesPhaseVoiceUrl
+};
+
+const playSampleCue = async (cueName) => {
+  if (typeof window === 'undefined' || typeof window.Audio === 'undefined') {
+    return false;
+  }
+
+  const sampleUrl = SAMPLE_CUES[cueName];
+  if (!sampleUrl) {
+    return false;
+  }
+
+  try {
+    const audio = new window.Audio(sampleUrl);
+    audio.preload = 'auto';
+    audio.volume = 0.95;
+    await audio.play();
+    return true;
+  } catch {
+    return false;
+  }
 };
 
 const schedulePattern = (audioContext, pattern) => {
@@ -122,6 +160,11 @@ export function AudioCueProvider({ children }) {
   const playCue = useCallback(
     async (cueName) => {
       if (!audioEnabled) {
+        return;
+      }
+
+      const playedSample = await playSampleCue(cueName);
+      if (playedSample) {
         return;
       }
 

@@ -9,6 +9,10 @@ import {
   TeamTurnOrder,
   TurnSummaryPanel
 } from '../../components/gameplay/SharedGameUi';
+import {
+  getHatGamePhaseCueName,
+  getHatGamePhaseTone
+} from '../../games/hatGamePresentation';
 import { formatCountdown, getCountdownSeconds } from '../../games/timedTurns';
 import { buildActiveTeamOrder, buildTeamRosters, EMPTY_TEAMS, getTeamById } from './helpers';
 import { ResultsActions } from './common';
@@ -66,6 +70,7 @@ export function HatGamePlay({
     () => buildActiveTeamOrder(teamRosters, publicState.activeTeamId),
     [publicState.activeTeamId, teamRosters]
   );
+  const phaseTone = getHatGamePhaseTone(publicState?.phaseNumber);
   const [secondsRemaining, setSecondsRemaining] = useState(() =>
     getCountdownSeconds(turn?.endsAt)
   );
@@ -83,12 +88,12 @@ export function HatGamePlay({
 
   useEffect(() => {
     const phaseNumber = publicState?.phaseNumber ?? 1;
-    if (phaseNumber > previousPhaseRef.current) {
-      playCue('phase-change');
+    if (phaseNumber > previousPhaseRef.current && stage === 'turn') {
+      playCue(getHatGamePhaseCueName(phaseNumber));
     }
 
     previousPhaseRef.current = phaseNumber;
-  }, [playCue, publicState?.phaseNumber]);
+  }, [playCue, publicState?.phaseNumber, stage]);
 
   useEffect(() => {
     if (stage !== 'turn' || !turn?.endsAt) {
@@ -127,11 +132,8 @@ export function HatGamePlay({
         <div className="gameplay-stack">
           <section className="panel panel--hero panel--stacked gameplay-primary">
             <div className="panel-heading">
-              <p className="status-pill">
-                Phase {publicState.phaseNumber}: {publicState.phaseName}
-              </p>
               <h2>You are describing</h2>
-              <p>{activeTeam?.name ?? 'Your team'} are live.</p>
+              <p>Your team is live.</p>
             </div>
 
             <div className="turn-hero">
@@ -145,7 +147,7 @@ export function HatGamePlay({
               />
             </div>
 
-            <div className="role-card">
+            <div className={`role-card role-card--word role-card--word-${phaseTone}`}>
               <span className="helper-text">Current clue</span>
               <strong className="role-card__title">{privateState?.clue ?? 'Loading next clue'}</strong>
               <span className="role-card__body">Keep the clue on screen and score it fast.</span>
@@ -212,10 +214,7 @@ export function HatGamePlay({
         <div className="gameplay-stack">
           <section className="panel panel--hero panel--stacked gameplay-primary">
             <div className="panel-heading">
-              <p className="status-pill">
-                Phase {publicState.phaseNumber}: {publicState.phaseName}
-              </p>
-              <h2>{activeTeam?.name ?? 'Your team'} are live</h2>
+              <h2>Your team is live</h2>
               <p>{publicState.activeDescriberName} is describing for your team.</p>
             </div>
 
@@ -250,9 +249,6 @@ export function HatGamePlay({
       <div className="gameplay-stack">
         <section className="panel panel--hero panel--stacked gameplay-primary">
           <div className="panel-heading">
-            <p className="status-pill">
-              Phase {publicState.phaseNumber}: {publicState.phaseName}
-            </p>
             <h2>Wait for your team</h2>
             <p>{publicState.activeDescriberName} is describing for {activeTeam?.name ?? 'the active team'}.</p>
           </div>
@@ -330,19 +326,13 @@ export function HatGamePlay({
     <div className="gameplay-stack">
       <section className="panel panel--hero panel--stacked gameplay-primary">
         <div className="panel-heading">
-          <p className="status-pill">
-            Phase {publicState.phaseNumber}: {publicState.phaseName}
-          </p>
-          <h2>
-            {privateState?.canStartTurn
-              ? 'Your team is up'
-              : privateState?.isActiveTeam
-                ? 'Your team is up next'
-                : 'Next team up'}
-          </h2>
+          <h2>{privateState?.isActiveTeam ? "You're up now" : 'Next team up'}</h2>
           <p>
-            {activeTeam?.name ?? 'Next team'} will go next, with {publicState.activeDescriberName}{' '}
-            describing.
+            {privateState?.canStartTurn
+              ? `Start when ${publicState.activeDescriberName} has the phone and the team is listening.`
+              : privateState?.isActiveTeam
+                ? `Waiting for ${publicState.activeDescriberName} to start the turn.`
+                : `${activeTeam?.name ?? 'Next team'} will go next, with ${publicState.activeDescriberName} describing.`}
           </p>
         </div>
 
@@ -391,7 +381,7 @@ export function HatGamePlay({
         ) : privateState?.isActiveTeam ? (
           <RoleStatusCard
             title="Guessing"
-            description="Stay close. Your team is about to guess the next phase."
+            description={`Waiting for ${publicState.activeDescriberName} to start the turn.`}
           />
         ) : (
           <TeamTurnOrder

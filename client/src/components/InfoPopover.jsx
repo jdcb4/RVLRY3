@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { InfoIcon } from './Icons';
+import { useEffect, useId, useState } from 'react';
+import { InfoIcon, XIcon } from './Icons';
 
 export function InfoPopover({
   label = 'More details',
@@ -8,6 +8,22 @@ export function InfoPopover({
   children
 }) {
   const [isOpen, setIsOpen] = useState(false);
+  const panelId = useId();
+
+  useEffect(() => {
+    if (!isOpen) {
+      return undefined;
+    }
+
+    const handleKeyDown = (event) => {
+      if (event.key === 'Escape') {
+        setIsOpen(false);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen]);
 
   return (
     <details
@@ -15,11 +31,39 @@ export function InfoPopover({
       open={isOpen}
       onToggle={(event) => setIsOpen(event.currentTarget.open)}
     >
-      <summary aria-label={label} className="icon-button icon-button--subtle">
+      <summary
+        aria-controls={panelId}
+        aria-expanded={isOpen}
+        aria-haspopup="dialog"
+        aria-label={label}
+        className="icon-button icon-button--subtle"
+      >
         <InfoIcon />
       </summary>
-      <div className="info-popover__panel">
-        {title ? <strong>{title}</strong> : null}
+      {isOpen ? (
+        <button
+          aria-label={`Dismiss ${label}`}
+          className="info-popover__backdrop"
+          onClick={() => setIsOpen(false)}
+          type="button"
+        />
+      ) : null}
+      <div
+        className="info-popover__panel"
+        id={panelId}
+        role="dialog"
+      >
+        <div className="info-popover__header">
+          {title ? <strong>{title}</strong> : <span />}
+          <button
+            type="button"
+            aria-label={`Close ${label}`}
+            className="icon-button icon-button--subtle"
+            onClick={() => setIsOpen(false)}
+          >
+            <XIcon />
+          </button>
+        </div>
         <div className="info-popover__body">{children}</div>
       </div>
     </details>

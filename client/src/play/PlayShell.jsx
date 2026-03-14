@@ -1,9 +1,11 @@
-import { Link, Outlet, useParams } from 'react-router-dom';
+import { Link, Outlet, useLocation, useParams } from 'react-router-dom';
 import { SoundToggle } from '../audio/SoundToggle';
+import { ArrowLeftIcon } from '../components/Icons';
 import { getGameById } from '../games/config';
 import { PlaySessionProvider } from './PlaySessionContext';
 
 export function PlayShell() {
+  const location = useLocation();
   const { gameId } = useParams();
   const game = getGameById(gameId);
 
@@ -22,13 +24,28 @@ export function PlayShell() {
     );
   }
 
+  const lobbyBackTarget = location.pathname.includes(`/play/${game.id}/lobby/`)
+    ? `/play/${game.id}`
+    : null;
+
   return (
     <PlaySessionProvider game={game}>
       <div className="play-shell">
         <header className="topbar">
-          <Link className="topbar__brand" to="/">
-            RVLRY
-          </Link>
+          <div className="topbar__leading">
+            {lobbyBackTarget ? (
+              <Link
+                aria-label="Back to game setup"
+                className="topbar__pill topbar__pill--button topbar__pill--icon topbar__pill--compact"
+                to={lobbyBackTarget}
+              >
+                <ArrowLeftIcon />
+              </Link>
+            ) : null}
+            <Link className="topbar__brand" to="/">
+              RVLRY
+            </Link>
+          </div>
           <div className="topbar__meta">
             <SoundToggle compact />
             <span className="topbar__pill">{game.name}</span>

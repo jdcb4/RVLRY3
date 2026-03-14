@@ -1,6 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useAudioCues } from '../../audio/AudioCueContext';
 import { useStageCue, useTimedTurnAudio } from '../../audio/useGameAudio';
+import {
+  getHatGamePhaseCueName,
+  getHatGamePhaseTone
+} from '../../games/hatGamePresentation';
 import { formatCountdown, getCountdownSeconds } from '../../games/timedTurns';
 import {
   getHatGamePhaseMeta,
@@ -38,6 +42,7 @@ export function HatGameLocalView({
     [session.players, session.teams]
   );
   const previousPhaseRef = useRef(session.phaseNumber);
+  const phaseTone = getHatGamePhaseTone(session.phaseNumber);
 
   useTimedTurnAudio({
     active: session.stage === 'turn',
@@ -49,12 +54,12 @@ export function HatGameLocalView({
   });
 
   useEffect(() => {
-    if (session.phaseNumber > previousPhaseRef.current) {
-      playCue('phase-change');
+    if (session.phaseNumber > previousPhaseRef.current && session.stage === 'turn') {
+      playCue(getHatGamePhaseCueName(session.phaseNumber));
     }
 
     previousPhaseRef.current = session.phaseNumber;
-  }, [playCue, session.phaseNumber]);
+  }, [playCue, session.phaseNumber, session.stage]);
 
   useEffect(() => {
     setHandoffVisible(false);
@@ -110,7 +115,7 @@ export function HatGameLocalView({
             <p>{phaseMeta.instruction}</p>
           </div>
 
-          <div className="role-card">
+          <div className={`role-card role-card--word role-card--word-${phaseTone}`}>
             <span className="helper-text">Current clue</span>
             <strong className="role-card__title">{currentClue}</strong>
             <span className="role-card__body">Keep the clue visible only for the describer.</span>
