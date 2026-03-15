@@ -16,6 +16,7 @@ import {
   TeamScoreboard,
   TurnSummaryPanel
 } from '../gameplay/SharedGameUi';
+import { XIcon } from '../Icons';
 import {
   HandoffPanel,
   ResultsActions
@@ -95,21 +96,33 @@ export function HatGameLocalView({
     return (
       <div className="gameplay-stack">
         <section className="panel panel--hero panel--stacked gameplay-primary">
-          <div className="panel-heading">
-            <p className="status-pill">
-              Phase {session.phaseNumber}: {phaseMeta.name}
-            </p>
-            <h2>{context.activeDescriberName} is describing</h2>
+          <div className="turn-panel__topbar">
+            <div className="panel-heading">
+              <h2>{context.activeTeam?.name ?? 'Team'} up</h2>
+            </div>
+            <button
+              type="button"
+              className="icon-button icon-button--subtle"
+              aria-label="End turn"
+              onClick={() => applyAction({ type: 'end-turn' })}
+            >
+              <XIcon />
+            </button>
           </div>
 
-          <div className="turn-hero">
+          <div className={`role-card role-card--word role-card--word-${phaseTone}`}>
+            <span className="helper-text">Current clue</span>
+            <strong className="role-card__title">{currentClue}</strong>
+          </div>
+
+          <div className="turn-hero turn-hero--compact">
             <div className="turn-hero__clock">
               <span className="helper-text">Time left</span>
               <strong>{formatCountdown(secondsRemaining)}</strong>
             </div>
             <div className="turn-hero__score">
-              <span className="helper-text">Skips left</span>
-              <strong>{session.activeTurn?.skipsRemaining ?? 0}</strong>
+              <span className="helper-text">Rule</span>
+              <strong>{phaseMeta.name}</strong>
             </div>
           </div>
 
@@ -118,17 +131,11 @@ export function HatGameLocalView({
             <p>{phaseMeta.instruction}</p>
           </div>
 
-          <div className={`role-card role-card--word role-card--word-${phaseTone}`}>
-            <span className="helper-text">Current clue</span>
-            <strong className="role-card__title">{currentClue}</strong>
-            <span className="role-card__body">Keep the clue visible only for the describer.</span>
-          </div>
-
           <SummaryChips
             items={[
-              { label: 'Team', value: context.activeTeam?.name ?? 'Team' },
               { label: 'Score', value: session.activeTurn?.score ?? 0 },
-              { label: 'Correct', value: session.activeTurn?.correctCount ?? 0 }
+              { label: 'Correct', value: session.activeTurn?.correctCount ?? 0 },
+              { label: 'Skips left', value: session.activeTurn?.skipsRemaining ?? 0 }
             ]}
           />
 
@@ -152,23 +159,27 @@ export function HatGameLocalView({
             </div>
           )}
 
-          <div className="actions actions--stretch">
-            <button onClick={() => applyAction({ type: 'mark-correct' })}>Correct</button>
+          <div className="turn-action-dock">
             <button
               className="secondary-action"
               disabled={
                 session.activeTurn?.skippedCluePoolIndex !== null ||
                 session.activeTurn?.skipsRemaining <= 0
               }
-              onClick={() => applyAction({ type: 'skip-clue' })}
+              onClick={async () => {
+                await playCue('skip');
+                applyAction({ type: 'skip-clue' });
+              }}
             >
               Skip
             </button>
             <button
-              className="secondary-action"
-              onClick={() => applyAction({ type: 'end-turn' })}
+              onClick={async () => {
+                await playCue('correct');
+                applyAction({ type: 'mark-correct' });
+              }}
             >
-              End turn
+              Correct
             </button>
           </div>
         </section>

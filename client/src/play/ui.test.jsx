@@ -184,7 +184,8 @@ describe('play UI', () => {
       />
     );
 
-    expect(screen.getByText('Live turn')).toBeTruthy();
+    expect(screen.getByText('Current word')).toBeTruthy();
+    expect(screen.getByText('Time left')).toBeTruthy();
 
     act(() => {
       vi.advanceTimersByTime(500);

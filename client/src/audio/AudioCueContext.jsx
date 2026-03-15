@@ -67,6 +67,14 @@ const CUE_PATTERNS = {
   submit: [
     { at: 0, duration: 0.05, frequency: 880, type: 'triangle', gain: 0.022 }
   ],
+  correct: [
+    { at: 0, duration: 0.05, frequency: 880, type: 'triangle', gain: 0.024 },
+    { at: 0.08, duration: 0.07, frequency: 1174.66, type: 'triangle', gain: 0.028 }
+  ],
+  skip: [
+    { at: 0, duration: 0.05, frequency: 554.37, type: 'sine', gain: 0.02 },
+    { at: 0.08, duration: 0.06, frequency: 493.88, type: 'sine', gain: 0.018 }
+  ],
   'hatgame-phase-one-word': [
     { at: 0, duration: 0.08, frequency: 523.25, type: 'triangle', gain: 0.03 },
     { at: 0.1, duration: 0.08, frequency: 659.25, type: 'triangle', gain: 0.034 },

@@ -930,6 +930,10 @@ summary:focus-visible {
   gap: 0.9rem;
 }
 
+.turn-hero--compact {
+  gap: 0.75rem;
+}
+
 .turn-hero__clock,
 .turn-hero__score {
   display: grid;
@@ -986,6 +990,14 @@ summary:focus-visible {
 
 .role-card--word-describe {
   background: rgba(255, 255, 255, 0.03);
+}
+
+.role-card--word-guessing {
+  border-color: rgba(96, 178, 255, 0.2);
+  background:
+    linear-gradient(180deg, rgba(96, 178, 255, 0.16), rgba(96, 178, 255, 0.05)),
+    rgba(255, 255, 255, 0.03);
+  box-shadow: inset 0 0 0 1px rgba(96, 178, 255, 0.08);
 }
 
 .role-card--word-one-word {
@@ -1280,6 +1292,37 @@ summary:focus-visible {
   gap: 1rem;
 }
 
+.turn-panel__topbar {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.turn-action-dock {
+  position: sticky;
+  bottom: 0;
+  z-index: 12;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+  padding: 1rem 0 calc(1rem + env(safe-area-inset-bottom, 0px));
+  margin-top: auto;
+}
+
+.turn-action-dock::before {
+  content: '';
+  position: absolute;
+  inset: -1.5rem -1rem 0;
+  z-index: -1;
+  background: linear-gradient(
+    180deg,
+    rgba(13, 27, 30, 0),
+    rgba(13, 27, 30, 0.94) 36%,
+    rgba(13, 27, 30, 1) 100%
+  );
+}
+
 .disclosure {
   padding: 0;
 }
@@ -1525,10 +1568,6 @@ summary:focus-visible {
 
   .summary-chip {
     flex: 1 1 42%;
-  }
-
-  .turn-hero {
-    grid-template-columns: 1fr;
   }
 
   .team-card__header,

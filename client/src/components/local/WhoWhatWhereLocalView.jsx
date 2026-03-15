@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useAudioCues } from '../../audio/AudioCueContext';
 import { useStageCue, useTimedTurnAudio } from '../../audio/useGameAudio';
 import { formatCountdown, getCountdownSeconds } from '../../games/timedTurns';
 import { getWhoWhatWhereContext } from '../../local/session';
@@ -8,6 +9,7 @@ import {
   TeamScoreboard,
   TurnSummaryPanel
 } from '../gameplay/SharedGameUi';
+import { XIcon } from '../Icons';
 import { buildWhoWhatWhereRosters } from './helpers';
 import { HandoffPanel, ResultsActions } from './common';
 
@@ -19,6 +21,7 @@ export function WhoWhatWhereLocalView({
   onPlayAgain,
   onResetSetup
 }) {
+  const { playCue } = useAudioCues();
   const [handoffVisible, setHandoffVisible] = useState(false);
   const [secondsRemaining, setSecondsRemaining] = useState(() =>
     getCountdownSeconds(session.activeTurn?.endsAt)
@@ -63,17 +66,33 @@ export function WhoWhatWhereLocalView({
 
   if (session.stage === 'turn') {
     const currentWord =
-      session.activeTurn?.wordQueue[session.activeTurn?.queueIndex] ?? 'Loading';
+      session.activeTurn?.currentWordSource === 'skipped'
+        ? session.activeTurn?.currentSkippedWord?.word ?? 'Loading'
+        : session.activeTurn?.wordQueue[session.activeTurn?.queueIndex] ?? 'Loading';
 
     return (
       <div className="gameplay-stack">
         <section className="panel panel--hero panel--stacked gameplay-primary">
-          <div className="panel-heading">
-            <p className="status-pill">Live turn</p>
-            <h2>{context.activeDescriberName} is describing</h2>
+          <div className="turn-panel__topbar">
+            <div className="panel-heading">
+              <h2>{context.activeTeam?.name ?? 'Team'} up</h2>
+            </div>
+            <button
+              type="button"
+              className="icon-button icon-button--subtle"
+              aria-label="End turn"
+              onClick={() => applyAction({ type: 'end-turn' })}
+            >
+              <XIcon />
+            </button>
           </div>
 
-          <div className="turn-hero">
+          <div className="role-card role-card--word role-card--word-guessing">
+            <span className="helper-text">Current word</span>
+            <strong className="role-card__title">{currentWord}</strong>
+          </div>
+
+          <div className="turn-hero turn-hero--compact">
             <div className="turn-hero__clock">
               <span className="helper-text">Time left</span>
               <strong>{formatCountdown(secondsRemaining)}</strong>
@@ -84,14 +103,8 @@ export function WhoWhatWhereLocalView({
             </div>
           </div>
 
-          <div className="role-card">
-            <span className="helper-text">Current word</span>
-            <strong className="role-card__title">{currentWord}</strong>
-          </div>
-
           <SummaryChips
             items={[
-              { label: 'Team', value: context.activeTeam?.name ?? 'Team' },
               { label: 'Score', value: session.activeTurn?.score ?? 0 },
               {
                 label: 'Skipped waiting',
@@ -125,19 +138,23 @@ export function WhoWhatWhereLocalView({
             </div>
           ) : null}
 
-          <div className="actions actions--stretch">
-            <button onClick={() => applyAction({ type: 'mark-correct' })}>Correct</button>
+          <div className="turn-action-dock">
             <button
               className="secondary-action"
-              onClick={() => applyAction({ type: 'skip-word' })}
+              onClick={async () => {
+                await playCue('skip');
+                applyAction({ type: 'skip-word' });
+              }}
             >
               Skip
             </button>
             <button
-              className="secondary-action"
-              onClick={() => applyAction({ type: 'end-turn' })}
+              onClick={async () => {
+                await playCue('correct');
+                applyAction({ type: 'mark-correct' });
+              }}
             >
-              End turn
+              Correct
             </button>
           </div>
         </section>
