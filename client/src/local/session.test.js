@@ -86,7 +86,7 @@ describe('local pass-and-play session engine', () => {
     session = applyLocalAction(session, { type: 'mark-correct' });
     session = applyLocalAction(session, { type: 'skip-word' });
     expect(session.activeTurn.currentWordSource).toBe('skipped');
-    expect(session.activeTurn.currentSkippedWord).toEqual({ word: 'Panda' });
+    expect(session.activeTurn.currentSkippedWord).toMatchObject({ word: 'Panda' });
     session = applyLocalAction(session, { type: 'end-turn' });
 
     expect(session.stage).toBe('ready');
@@ -105,6 +105,55 @@ describe('local pass-and-play session engine', () => {
     expect(session.stage).toBe('results');
     expect(session.results.leaderboard).toHaveLength(2);
     expect(session.results.winnerTeamIds).toHaveLength(1);
+  });
+
+  it('supports multiple selectable skipped words in local WhoWhatWhere', () => {
+    const players = rebalanceWhoWhatWherePlayers(createLocalPlayers(4), 2);
+    let session = buildLocalSession({
+      gameId: 'whowhatwhere',
+      players,
+      settings: {
+        ...DEFAULT_LOCAL_WHOWHATWHERE_SETTINGS,
+        teamCount: 2,
+        skipLimit: 3
+      }
+    });
+
+    session = applyLocalAction(session, {
+      type: 'start-turn',
+      payload: {
+        category: 'Animals',
+        words: ['Lion', 'Tiger', 'Panda', 'Falcon', 'Otter']
+      }
+    });
+
+    session = applyLocalAction(session, { type: 'skip-word' });
+    session = applyLocalAction(session, { type: 'skip-word' });
+    session = applyLocalAction(session, { type: 'skip-word' });
+
+    expect(session.activeTurn.skippedWords.map((entry) => entry.word)).toEqual([
+      'Lion',
+      'Tiger',
+      'Panda'
+    ]);
+
+    session = applyLocalAction(session, {
+      type: 'return-skipped-word',
+      payload: { skippedWordId: session.activeTurn.skippedWords[1].id }
+    });
+
+    expect(session.activeTurn.currentWordSource).toBe('skipped');
+    expect(session.activeTurn.currentSkippedWord.word).toBe('Tiger');
+    expect(session.activeTurn.skippedWords.map((entry) => entry.word)).toEqual(['Lion', 'Panda']);
+
+    session = applyLocalAction(session, { type: 'mark-correct' });
+    session = applyLocalAction(session, { type: 'skip-word' });
+
+    expect(session.activeTurn.skippedWords.map((entry) => entry.word)).toEqual([
+      'Lion',
+      'Panda',
+      'Falcon'
+    ]);
   });
 
   it('plays a complete local DrawNGuess chain from prompt to reveal', () => {
@@ -178,15 +227,22 @@ describe('local pass-and-play session engine', () => {
         continue;
       }
 
-      if (!usedSkipReturn && session.activeTurn?.skippedCluePoolIndex === null) {
+      if (
+        !usedSkipReturn &&
+        (session.activeTurn?.skippedClues?.length ?? 0) === 0 &&
+        session.activeTurn?.currentSkippedCluePoolIndex === null
+      ) {
         const skippedClue = session.activeTurn.clueQueue[session.activeTurn.queueIndex].text;
         session = applyLocalAction(session, { type: 'skip-clue' });
-        expect(session.activeTurn.skippedClueText).toBe(skippedClue);
+        expect(session.activeTurn.skippedClues.map((entry) => entry.text)).toContain(skippedClue);
         expect(session.activeTurn.clueQueue[session.activeTurn.queueIndex].text).not.toBe(
           skippedClue
         );
 
-        session = applyLocalAction(session, { type: 'return-skipped-clue' });
+        session = applyLocalAction(session, {
+          type: 'return-skipped-clue',
+          payload: { poolIndex: session.activeTurn.skippedClues[0].poolIndex }
+        });
         expect(session.activeTurn.clueQueue[session.activeTurn.queueIndex].text).toBe(skippedClue);
         usedSkipReturn = true;
         continue;
@@ -336,14 +392,67 @@ describe('local pass-and-play session engine', () => {
 
     session = applyLocalAction(session, { type: 'mark-correct' });
     session = applyLocalAction(session, { type: 'mark-correct' });
-    session = applyLocalAction(session, { type: 'return-skipped-clue' });
+    session = applyLocalAction(session, {
+      type: 'return-skipped-clue',
+      payload: { poolIndex: session.activeTurn.skippedClues[0].poolIndex }
+    });
     session = applyLocalAction(session, { type: 'mark-correct' });
 
-    expect(session.activeTurn.skippedCluePoolIndex).toBeNull();
+    expect(session.activeTurn.currentSkippedCluePoolIndex).toBeNull();
     expect(session.activeTurn.skipsRemaining).toBe(1);
 
     session = applyLocalAction(session, { type: 'skip-clue' });
-    expect(session.activeTurn.skippedCluePoolIndex).not.toBeNull();
+    expect(session.activeTurn.skippedClues).toHaveLength(1);
+  });
+
+  it('supports multiple selectable skipped clues in local HatGame', () => {
+    const players = rebalanceWhoWhatWherePlayers(createLocalPlayers(4), 2);
+    let session = buildLocalSession({
+      gameId: 'hatgame',
+      players,
+      settings: {
+        ...DEFAULT_LOCAL_HATGAME_SETTINGS,
+        teamCount: 2,
+        cluesPerPlayer: 1,
+        skipsPerTurn: 3
+      },
+      lobbyState: {
+        clueSubmissions: {
+          [players[0].id]: { clues: ['Albert Einstein'] },
+          [players[1].id]: { clues: ['Beyonce'] },
+          [players[2].id]: { clues: ['Spider-Man'] },
+          [players[3].id]: { clues: ['Batman'] }
+        }
+      },
+      rng: () => 0.5
+    });
+
+    session = applyLocalAction(session, {
+      type: 'start-turn',
+      payload: {}
+    });
+
+    session = applyLocalAction(session, { type: 'skip-clue' });
+    session = applyLocalAction(session, { type: 'skip-clue' });
+    session = applyLocalAction(session, { type: 'skip-clue' });
+
+    expect(session.activeTurn.skippedClues).toHaveLength(3);
+
+    const targetSkippedClue = session.activeTurn.skippedClues[1];
+    session = applyLocalAction(session, {
+      type: 'return-skipped-clue',
+      payload: { poolIndex: targetSkippedClue.poolIndex }
+    });
+
+    expect(session.activeTurn.clueQueue[session.activeTurn.queueIndex].text).toBe(
+      targetSkippedClue.text
+    );
+    expect(session.activeTurn.skippedClues).toHaveLength(2);
+
+    session = applyLocalAction(session, { type: 'mark-correct' });
+    session = applyLocalAction(session, { type: 'skip-clue' });
+
+    expect(session.activeTurn.skippedClues).toHaveLength(3);
   });
 
   it('requires at least three players for local Imposter', () => {

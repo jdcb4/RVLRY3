@@ -86,12 +86,13 @@ export function HatGameLocalView({
   }, [applyAction, session.activeTurn?.endsAt, session.stage]);
 
   if (session.stage === 'turn') {
+    const skippedClues = session.activeTurn?.skippedClues ?? [];
     const currentClue =
       session.activeTurn?.clueQueue[session.activeTurn?.queueIndex]?.text ?? 'Loading';
     const showingSkippedClue =
-      session.activeTurn?.skippedCluePoolIndex !== null &&
+      session.activeTurn?.currentSkippedCluePoolIndex !== null &&
       session.activeTurn?.clueQueue[session.activeTurn?.queueIndex]?.poolIndex ===
-        session.activeTurn?.skippedCluePoolIndex;
+        session.activeTurn?.currentSkippedCluePoolIndex;
 
     return (
       <div className="gameplay-stack">
@@ -139,23 +140,32 @@ export function HatGameLocalView({
             ]}
           />
 
-          {session.activeTurn?.skippedCluePoolIndex !== null && (
+          {(showingSkippedClue || skippedClues.length > 0) && (
             <div className="notice-card notice-card--focus">
-              <strong>{showingSkippedClue ? 'Back on skipped clue' : 'Skipped clue waiting'}</strong>
+              <strong>{showingSkippedClue ? 'Working through skipped clues' : 'Skipped clues waiting'}</strong>
               <p>
                 {showingSkippedClue
-                  ? 'Finish this clue before moving on.'
-                  : 'Bring the skipped clue back before using another skip.'}
+                  ? 'The current clue came from your skipped list. You can also jump to another waiting clue.'
+                  : `${skippedClues.length} skipped clue(s) are waiting. Pick any one to return now.`}
               </p>
-              <div className="actions">
-                <button
-                  className="secondary-action"
-                  disabled={showingSkippedClue}
-                  onClick={() => applyAction({ type: 'return-skipped-clue' })}
-                >
-                  Go back to skipped clue
-                </button>
-              </div>
+              {skippedClues.length > 0 ? (
+                <div className="actions">
+                  {skippedClues.map((entry) => (
+                    <button
+                      key={entry.poolIndex}
+                      className="secondary-action"
+                      onClick={() =>
+                        applyAction({
+                          type: 'return-skipped-clue',
+                          payload: { poolIndex: entry.poolIndex }
+                        })
+                      }
+                    >
+                      {entry.text}
+                    </button>
+                  ))}
+                </div>
+              ) : null}
             </div>
           )}
 
@@ -165,10 +175,7 @@ export function HatGameLocalView({
           <div className="turn-action-dock turn-action-dock--fixed">
             <button
               className="secondary-action"
-              disabled={
-                session.activeTurn?.skippedCluePoolIndex !== null ||
-                session.activeTurn?.skipsRemaining <= 0
-              }
+              disabled={session.activeTurn?.skipsRemaining <= 0}
               onClick={async () => {
                 await playCue('skip');
                 applyAction({ type: 'skip-clue' });

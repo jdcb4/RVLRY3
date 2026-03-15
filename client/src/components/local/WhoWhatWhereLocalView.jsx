@@ -65,6 +65,10 @@ export function WhoWhatWhereLocalView({
   }, [applyAction, session.activeTurn?.endsAt, session.stage]);
 
   if (session.stage === 'turn') {
+    const skippedWords = session.activeTurn?.skippedWords ?? [];
+    const canSkip =
+      (session.activeTurn?.skipLimit ?? 0) < 0 ||
+      skippedWords.length < (session.activeTurn?.skipLimit ?? 0);
     const currentWord =
       session.activeTurn?.currentWordSource === 'skipped'
         ? session.activeTurn?.currentSkippedWord?.word ?? 'Loading'
@@ -113,26 +117,34 @@ export function WhoWhatWhereLocalView({
             ]}
           />
 
-          {session.activeTurn?.skippedWords?.length > 0 ? (
+          {session.activeTurn?.currentWordSource === 'skipped' || skippedWords.length > 0 ? (
             <div className="notice-card notice-card--focus">
               <strong>
                 {session.activeTurn?.currentWordSource === 'skipped'
-                  ? 'Back on skipped words'
+                  ? 'Working through skipped words'
                   : 'Skipped words waiting'}
               </strong>
               <p>
                 {session.activeTurn?.currentWordSource === 'skipped'
-                  ? 'Finish this returned word or send it to the back of the skipped queue.'
-                  : `${session.activeTurn.skippedWords.length} word(s) are waiting to come back.`}
+                  ? 'The current word came from your skipped list. You can also jump to another waiting word below.'
+                  : `${skippedWords.length} word(s) are waiting to come back. Pick any one to return now.`}
               </p>
-              {session.activeTurn?.currentWordSource !== 'skipped' ? (
+              {skippedWords.length > 0 ? (
                 <div className="actions">
-                  <button
-                    className="secondary-action"
-                    onClick={() => applyAction({ type: 'return-skipped-word' })}
-                  >
-                    Return to skipped word
-                  </button>
+                  {skippedWords.map((entry) => (
+                    <button
+                      key={entry.id}
+                      className="secondary-action"
+                      onClick={() =>
+                        applyAction({
+                          type: 'return-skipped-word',
+                          payload: { skippedWordId: entry.id }
+                        })
+                      }
+                    >
+                      {entry.word}
+                    </button>
+                  ))}
                 </div>
               ) : null}
             </div>
@@ -144,6 +156,7 @@ export function WhoWhatWhereLocalView({
           <div className="turn-action-dock turn-action-dock--fixed">
             <button
               className="secondary-action"
+              disabled={!canSkip}
               onClick={async () => {
                 await playCue('skip');
                 applyAction({ type: 'skip-word' });

@@ -122,20 +122,25 @@ export function WhoWhatWherePlay({
                 </strong>
                 <p>
                   {privateState?.returningSkippedWord
-                    ? 'Finish this returned word or send it to the back of the skipped queue.'
-                    : `${turn.pendingSkippedCount} skipped word(s) are waiting.`}
+                    ? 'The current word came from your skipped list. You can also jump to another waiting word.'
+                    : `${turn.pendingSkippedCount} skipped word(s) are waiting. Choose any one to return.`}
                 </p>
-                {!privateState?.returningSkippedWord ? (
-                  <div className="actions">
+                <div className="actions">
+                  {(privateState?.skippedWords ?? []).map((entry) => (
                     <button
+                      key={entry.id}
                       className="secondary-action"
                       disabled={pendingAction === 'return-skipped-word' || !privateState?.canReturnSkippedWord}
-                      onClick={() => sendGameAction(roomCode, 'return-skipped-word')}
+                      onClick={() =>
+                        sendGameAction(roomCode, 'return-skipped-word', {
+                          skippedWordId: entry.id
+                        })
+                      }
                     >
-                      Return to skipped word
+                      {entry.word}
                     </button>
-                  </div>
-                ) : null}
+                  ))}
+                </div>
               </div>
             ) : null}
 
@@ -145,7 +150,7 @@ export function WhoWhatWherePlay({
               </button>
               <button
                 className="secondary-action"
-                disabled={pendingAction === 'skip-word'}
+                disabled={pendingAction === 'skip-word' || !privateState?.canSkip}
                 onClick={() => sendGameAction(roomCode, 'skip-word')}
               >
                 Skip

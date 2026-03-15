@@ -48,20 +48,28 @@ export const buildHatGameCluePool = (players, clueSubmissions = {}) =>
   );
 
 export const isHatGameShowingSkippedClue = (activeTurn) => {
-  if (!activeTurn || activeTurn.skippedCluePoolIndex === null) {
+  if (!activeTurn || activeTurn.currentSkippedCluePoolIndex === null) {
     return false;
   }
 
   const currentClue = activeTurn.clueQueue[activeTurn.queueIndex] ?? null;
-  return currentClue?.poolIndex === activeTurn.skippedCluePoolIndex;
+  return currentClue?.poolIndex === activeTurn.currentSkippedCluePoolIndex;
 };
 
 const getHatGamePendingSkippedCount = (activeTurn) =>
-  activeTurn?.skippedCluePoolIndex === null ? 0 : 1;
+  activeTurn?.skippedClues?.length ?? 0;
 
 const syncHatGameSkipState = (activeTurn, skipLimit) => ({
   ...activeTurn,
   skipsRemaining: Math.max(skipLimit - getHatGamePendingSkippedCount(activeTurn), 0)
+});
+
+const hasHatGameUnresolvedSkippedClues = (activeTurn) =>
+  (activeTurn?.skippedClues?.length ?? 0) > 0 || activeTurn?.currentSkippedCluePoolIndex !== null;
+
+const createSkippedClueEntry = (clue) => ({
+  poolIndex: clue.poolIndex,
+  text: clue.text
 });
 
 export const createHatGame = ({ teams, settings, cluePool }) => {
@@ -98,7 +106,7 @@ const collectClueQueue = (game, rng) =>
   );
 
 const advanceHatGamePhaseWithinTurn = (game, activeTurn, rng) => {
-  if (activeTurn.skippedCluePoolIndex !== null) {
+  if (hasHatGameUnresolvedSkippedClues(activeTurn)) {
     return { error: 'Bring the skipped clue back before moving to the next phase' };
   }
 
@@ -123,8 +131,8 @@ const advanceHatGamePhaseWithinTurn = (game, activeTurn, rng) => {
       ...activeTurn,
       clueQueue: nextQueue,
       queueIndex: 0,
-      skippedCluePoolIndex: null,
-      skippedClueText: null,
+      skippedClues: [],
+      currentSkippedCluePoolIndex: null,
       skipsRemaining: game.settings.skipsPerTurn
     }
   };
@@ -282,8 +290,8 @@ export const applyHatGameAction = (
         correctCount: 0,
         skippedCount: 0,
         skipsRemaining: game.settings.skipsPerTurn,
-        skippedCluePoolIndex: null,
-        skippedClueText: null,
+        skippedClues: [],
+        currentSkippedCluePoolIndex: null,
         clueHistory: []
       }, game.settings.skipsPerTurn)
     };
@@ -328,6 +336,7 @@ export const applyHatGameAction = (
   const activeTurn = {
     ...game.activeTurn,
     clueQueue: [...game.activeTurn.clueQueue],
+    skippedClues: [...(game.activeTurn.skippedClues ?? [])],
     clueHistory: [...game.activeTurn.clueHistory]
   };
 
@@ -341,9 +350,8 @@ export const applyHatGameAction = (
       poolIndex: currentClue.poolIndex
     });
 
-    if (activeTurn.skippedCluePoolIndex === currentClue.poolIndex) {
-      activeTurn.skippedCluePoolIndex = null;
-      activeTurn.skippedClueText = null;
+    if (activeTurn.currentSkippedCluePoolIndex === currentClue.poolIndex) {
+      activeTurn.currentSkippedCluePoolIndex = null;
     }
 
     activeTurn.queueIndex += 1;
@@ -351,17 +359,13 @@ export const applyHatGameAction = (
   }
 
   if (action.type === 'skip-clue') {
-    if (activeTurn.skippedCluePoolIndex !== null) {
-      return { error: 'Answer the skipped clue before skipping again' };
-    }
-
     if (activeTurn.skipsRemaining <= 0) {
       return { error: 'No skips remain this turn' };
     }
 
     activeTurn.skippedCount += 1;
-    activeTurn.skippedCluePoolIndex = currentClue.poolIndex;
-    activeTurn.skippedClueText = currentClue.text;
+    activeTurn.skippedClues.push(createSkippedClueEntry(currentClue));
+    activeTurn.currentSkippedCluePoolIndex = null;
     activeTurn.clueHistory.push({
       clue: currentClue.text,
       status: 'skipped',
@@ -375,12 +379,40 @@ export const applyHatGameAction = (
   }
 
   if (action.type === 'return-skipped-clue') {
-    if (activeTurn.skippedCluePoolIndex === null) {
+    const availableSkippedClues = [...activeTurn.skippedClues];
+    if (activeTurn.currentSkippedCluePoolIndex !== null) {
+      const activeSkippedClue = activeTurn.clueQueue[activeTurn.queueIndex] ?? null;
+      if (activeSkippedClue) {
+        availableSkippedClues.unshift(createSkippedClueEntry(activeSkippedClue));
+      }
+    }
+
+    if (availableSkippedClues.length === 0) {
       return { error: 'There is no skipped clue to return to' };
     }
 
+    const targetPoolIndex =
+      action.payload?.poolIndex ?? availableSkippedClues[0]?.poolIndex ?? null;
+    const targetSkippedClue = availableSkippedClues.find((clue) => clue.poolIndex === targetPoolIndex);
+    if (!targetSkippedClue) {
+      return { error: 'The skipped clue is no longer available' };
+    }
+
+    activeTurn.skippedClues = activeTurn.skippedClues.filter(
+      (clue) => clue.poolIndex !== targetPoolIndex
+    );
+    if (
+      activeTurn.currentSkippedCluePoolIndex !== null &&
+      activeTurn.currentSkippedCluePoolIndex !== targetPoolIndex
+    ) {
+      const activeSkippedClue = activeTurn.clueQueue[activeTurn.queueIndex] ?? null;
+      if (activeSkippedClue) {
+        activeTurn.skippedClues.push(createSkippedClueEntry(activeSkippedClue));
+      }
+    }
+
     const skippedIndex = activeTurn.clueQueue.findIndex(
-      (clue) => clue.poolIndex === activeTurn.skippedCluePoolIndex
+      (clue) => clue.poolIndex === targetPoolIndex
     );
     if (skippedIndex === -1) {
       return { error: 'The skipped clue is no longer available' };
@@ -391,6 +423,7 @@ export const applyHatGameAction = (
       activeTurn.clueQueue.splice(activeTurn.queueIndex, 0, skippedClue);
     }
 
+    activeTurn.currentSkippedCluePoolIndex = targetPoolIndex;
     Object.assign(activeTurn, syncHatGameSkipState(activeTurn, game.settings.skipsPerTurn));
   }
 

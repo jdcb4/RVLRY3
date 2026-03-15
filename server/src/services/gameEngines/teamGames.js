@@ -110,13 +110,26 @@ const buildWhoWhatWherePrivateState = (players, publicState, game) => {
       isDescriber,
       canStartTurn: publicState.stage === 'ready' && isDescriber,
       canMarkCorrect: publicState.stage === 'turn' && isDescriber,
-      canSkip: publicState.stage === 'turn' && isDescriber,
+      canSkip:
+        publicState.stage === 'turn' &&
+        isDescriber &&
+        (
+          (game.activeTurn?.skipLimit ?? 0) < 0 ||
+          (game.activeTurn?.skippedWords?.length ?? 0) < (game.activeTurn?.skipLimit ?? 0)
+        ),
       canReturnSkippedWord:
         publicState.stage === 'turn' && isDescriber && game.activeTurn?.skippedWords?.length > 0,
       canEndTurn: publicState.stage === 'turn' && isDescriber,
       category: publicState.stage === 'turn' ? game.activeTurn?.category ?? null : null,
       word: publicState.stage === 'turn' && isDescriber ? currentWord : null,
       pendingSkippedCount: publicState.stage === 'turn' ? game.activeTurn?.skippedWords?.length ?? 0 : 0,
+      skippedWords:
+        publicState.stage === 'turn' && isDescriber
+          ? (game.activeTurn?.skippedWords ?? []).map((entry) => ({
+              id: entry.id,
+              word: entry.word
+            }))
+          : [],
       returningSkippedWord:
         publicState.stage === 'turn' && game.activeTurn?.currentWordSource === 'skipped'
     };
@@ -125,7 +138,9 @@ const buildWhoWhatWherePrivateState = (players, publicState, game) => {
 
 const buildHatGameTurnSnapshot = (activeTurn, phaseNumber) => {
   const currentClue = activeTurn.clueQueue[activeTurn.queueIndex] ?? null;
-  const skippedCluePending = Boolean(activeTurn.skippedCluePoolIndex !== null);
+  const pendingSkippedCount = activeTurn.skippedClues?.length ?? 0;
+  const skippedCluePending =
+    pendingSkippedCount > 0 || activeTurn.currentSkippedCluePoolIndex !== null;
 
   return {
     startedAt: activeTurn.startedAt,
@@ -136,10 +151,10 @@ const buildHatGameTurnSnapshot = (activeTurn, phaseNumber) => {
     correctCount: activeTurn.correctCount,
     skippedCount: activeTurn.skippedCount,
     skipsRemaining: activeTurn.skipsRemaining,
+    pendingSkippedCount,
     currentClueLength: currentClue?.text?.length ?? 0,
     skippedCluePending,
     showingSkippedClue: skippedCluePending && isHatGameShowingSkippedClue(activeTurn),
-    skippedClueLength: activeTurn.skippedClueText?.length ?? 0,
     clueHistory: activeTurn.clueHistory
   };
 };
@@ -194,8 +209,11 @@ const buildHatGamePrivateState = (players, publicState, game) => {
     const isActiveTeam = player.teamId && player.teamId === publicState.activeTeamId;
     const role = !player.teamId ? 'unassigned' : isDescriber ? 'describer' : isActiveTeam ? 'guesser' : 'spectator';
 
+    const pendingSkippedCount =
+      publicState.stage === 'turn' ? game.activeTurn?.skippedClues?.length ?? 0 : 0;
     const skippedCluePending =
-      publicState.stage === 'turn' && game.activeTurn?.skippedCluePoolIndex !== null;
+      publicState.stage === 'turn' &&
+      (pendingSkippedCount > 0 || game.activeTurn?.currentSkippedCluePoolIndex !== null);
     const showingSkippedClue =
       skippedCluePending && isHatGameShowingSkippedClue(game.activeTurn);
 
@@ -213,24 +231,27 @@ const buildHatGamePrivateState = (players, publicState, game) => {
       canSkip:
         publicState.stage === 'turn' &&
         isDescriber &&
-        (game.activeTurn?.skipsRemaining ?? 0) > 0 &&
-        game.activeTurn?.skippedCluePoolIndex === null,
+        (game.activeTurn?.skipsRemaining ?? 0) > 0,
       canReturnSkippedClue:
         publicState.stage === 'turn' &&
         isDescriber &&
-        game.activeTurn?.skippedCluePoolIndex !== null,
+        (game.activeTurn?.skippedClues?.length ?? 0) > 0,
       canEndTurn: publicState.stage === 'turn' && isDescriber,
       clue: publicState.stage === 'turn' && isDescriber ? currentClue?.text ?? null : null,
       skipsRemaining:
         publicState.stage === 'turn'
           ? game.activeTurn?.skipsRemaining ?? 0
           : game.settings.skipsPerTurn,
+      pendingSkippedCount,
       skippedCluePending,
       showingSkippedClue,
-      skippedClueText:
-        publicState.stage === 'turn' && isDescriber && showingSkippedClue
-          ? game.activeTurn?.skippedClueText ?? null
-          : null
+      skippedClues:
+        publicState.stage === 'turn' && isDescriber
+          ? (game.activeTurn?.skippedClues ?? []).map((entry) => ({
+              poolIndex: entry.poolIndex,
+              text: entry.text
+            }))
+          : []
     };
   });
 };

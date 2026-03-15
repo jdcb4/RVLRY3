@@ -161,26 +161,29 @@ export function HatGamePlay({
               ]}
             />
 
-            {privateState?.skippedCluePending ? (
+            {privateState?.showingSkippedClue || (privateState?.pendingSkippedCount ?? 0) > 0 ? (
               <div className="notice-card notice-card--focus">
-                <strong>{privateState?.showingSkippedClue ? 'Back on skipped clue' : 'Skipped clue waiting'}</strong>
+                <strong>{privateState?.showingSkippedClue ? 'Working through skipped clues' : 'Skipped clues waiting'}</strong>
                 <p>
                   {privateState?.showingSkippedClue
-                    ? 'Finish this clue before moving on.'
-                    : 'Bring the skipped clue back before you skip again.'}
+                    ? 'The current clue came from your skipped list. You can also jump to another waiting clue.'
+                    : `${privateState?.pendingSkippedCount ?? 0} skipped clue(s) are waiting. Choose any one to return.`}
                 </p>
                 <div className="actions">
-                  <button
-                    className="secondary-action"
-                    disabled={
-                      pendingAction === 'return-skipped-clue' ||
-                      !privateState?.canReturnSkippedClue ||
-                      privateState?.showingSkippedClue
-                    }
-                    onClick={() => sendGameAction(roomCode, 'return-skipped-clue')}
-                  >
-                    Go back to skipped clue
-                  </button>
+                  {(privateState?.skippedClues ?? []).map((entry) => (
+                    <button
+                      key={entry.poolIndex}
+                      className="secondary-action"
+                      disabled={pendingAction === 'return-skipped-clue' || !privateState?.canReturnSkippedClue}
+                      onClick={() =>
+                        sendGameAction(roomCode, 'return-skipped-clue', {
+                          poolIndex: entry.poolIndex
+                        })
+                      }
+                    >
+                      {entry.text}
+                    </button>
+                  ))}
                 </div>
               </div>
             ) : null}
@@ -237,13 +240,13 @@ export function HatGamePlay({
               description="Call names out loud while the describer keeps the cards moving."
             />
 
-            {turn?.skippedCluePending ? (
+            {turn?.showingSkippedClue || (turn?.pendingSkippedCount ?? 0) > 0 ? (
               <div className="notice-card">
-                <strong>{turn?.showingSkippedClue ? 'Back on skipped clue' : 'Skipped clue waiting'}</strong>
+                <strong>{turn?.showingSkippedClue ? 'Working through skipped clues' : 'Skipped clues waiting'}</strong>
                 <p>
                   {turn?.showingSkippedClue
                     ? 'Your team is back on the earlier skipped clue.'
-                    : 'The describer has to circle back before another skip.'}
+                    : `${turn?.pendingSkippedCount ?? 0} skipped clue(s) are still waiting to come back.`}
                 </p>
               </div>
             ) : null}

@@ -521,7 +521,7 @@ export function WhoWhatWhereSettingsCard({ settings, onChange, showHeading = tru
       </label>
 
       <label className="settings-field">
-        {showHeading ? <span className="helper-text">Skips waiting</span> : null}
+        {showHeading ? <span className="helper-text">Skips allowed</span> : null}
         <select
           value={String(settings.skipLimit)}
           onChange={(event) =>
@@ -533,9 +533,9 @@ export function WhoWhatWhereSettingsCard({ settings, onChange, showHeading = tru
             )
           }
         >
-          <option value={1}>1 word</option>
-          <option value={2}>2 words</option>
-          <option value={3}>3 words</option>
+          <option value={1}>1 skip</option>
+          <option value={2}>2 skips</option>
+          <option value={3}>3 skips</option>
           <option value="unlimited">Unlimited</option>
         </select>
       </label>

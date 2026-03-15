@@ -122,7 +122,7 @@ export function WhoWhatWhereLobby({
               </label>
 
               <label className="settings-field">
-                <span className="helper-text">Skipped words waiting</span>
+                <span className="helper-text">Skips allowed</span>
                 <select
                   value={String(settingsForm.skipLimit)}
                   disabled={pendingAction === 'update-settings'}
@@ -135,9 +135,9 @@ export function WhoWhatWhereLobby({
                     )
                   }
                 >
-                  <option value={1}>1 word</option>
-                  <option value={2}>2 words</option>
-                  <option value={3}>3 words</option>
+                  <option value={1}>1 skip</option>
+                  <option value={2}>2 skips</option>
+                  <option value={3}>3 skips</option>
                   <option value="unlimited">Unlimited</option>
                 </select>
               </label>

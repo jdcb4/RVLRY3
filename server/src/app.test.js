@@ -466,7 +466,7 @@ describe.sequential('RVLRY server integration', () => {
     await waitFor(() => host.state.room.phase === 'lobby', 'whowhatwhere room to return to lobby');
   });
 
-  it('restores WhoWhatWhere skip capacity after a skipped word is resolved online', async () => {
+  it('supports multiple selectable skipped words in WhoWhatWhere online', async () => {
     harnesses = await Promise.all(Array.from({ length: 4 }, () => connectHarness(baseUrl)));
     const [host, ...guests] = harnesses;
 
@@ -489,6 +489,17 @@ describe.sequential('RVLRY server integration', () => {
     }
 
     await waitFor(() => host.state.room?.players?.length === 4, 'whowhatwhere skip test players to join');
+
+    const updatedSettings = await host.emit('room:update-settings', {
+      code: roomCode,
+      settings: {
+        teamCount: 2,
+        turnDurationSeconds: 30,
+        totalRounds: 1,
+        skipLimit: 3
+      }
+    });
+    expect(updatedSettings.ok).toBe(true);
 
     for (const harness of harnesses) {
       const response = await harness.emit('room:ready', {
@@ -520,42 +531,42 @@ describe.sequential('RVLRY server integration', () => {
 
     await waitFor(() => host.state.room.gamePublicState.stage === 'turn', 'whowhatwhere skip test turn');
 
-    expect(host.state.room.gamePublicState.turn.pendingSkippedCount).toBe(0);
+    for (let index = 0; index < 3; index += 1) {
+      const skipped = await describerHarness.emit('game:action', {
+        code: roomCode,
+        type: 'skip-word',
+        payload: {}
+      });
+      expect(skipped.ok).toBe(true);
+    }
 
-    const skipped = await describerHarness.emit('game:action', {
-      code: roomCode,
-      type: 'skip-word',
-      payload: {}
-    });
-    expect(skipped.ok).toBe(true);
     await waitFor(
-      () => host.state.room.gamePublicState.turn.pendingSkippedCount === 1,
-      'whowhatwhere skipped word to queue'
+      () => host.state.room.gamePublicState.turn.pendingSkippedCount === 3,
+      'whowhatwhere skipped words to queue'
     );
+    expect(describerHarness.state.privateState.skippedWords).toHaveLength(3);
 
-    await describerHarness.emit('game:action', {
-      code: roomCode,
-      type: 'mark-correct',
-      payload: {}
-    });
-
+    const targetSkippedWord = describerHarness.state.privateState.skippedWords[1];
     const returned = await describerHarness.emit('game:action', {
       code: roomCode,
       type: 'return-skipped-word',
-      payload: {}
+      payload: { skippedWordId: targetSkippedWord.id }
     });
     expect(returned.ok).toBe(true);
 
-    await describerHarness.emit('game:action', {
+    await waitFor(
+      () =>
+        describerHarness.state.privateState.word === targetSkippedWord.word &&
+        host.state.room.gamePublicState.turn.pendingSkippedCount === 2,
+      'whowhatwhere targeted skipped word to return'
+    );
+
+    const resolved = await describerHarness.emit('game:action', {
       code: roomCode,
       type: 'mark-correct',
       payload: {}
     });
-
-    await waitFor(
-      () => host.state.room.gamePublicState.turn.pendingSkippedCount === 0,
-      'whowhatwhere skipped word to clear'
-    );
+    expect(resolved.ok).toBe(true);
 
     const skippedAgain = await describerHarness.emit('game:action', {
       code: roomCode,
@@ -563,9 +574,10 @@ describe.sequential('RVLRY server integration', () => {
       payload: {}
     });
     expect(skippedAgain.ok).toBe(true);
+
     await waitFor(
-      () => host.state.room.gamePublicState.turn.pendingSkippedCount === 1,
-      'whowhatwhere second skip to queue'
+      () => host.state.room.gamePublicState.turn.pendingSkippedCount === 3,
+      'whowhatwhere replacement skipped word to queue'
     );
   });
 
@@ -882,7 +894,9 @@ describe.sequential('RVLRY server integration', () => {
         const returnedSkipped = await describerHarness.emit('game:action', {
           code: roomCode,
           type: 'return-skipped-clue',
-          payload: {}
+          payload: {
+            poolIndex: describerHarness.state.privateState.skippedClues[0].poolIndex
+          }
         });
         expect(returnedSkipped.ok).toBe(true);
         usedSkipReturn = true;
@@ -926,7 +940,7 @@ describe.sequential('RVLRY server integration', () => {
     await waitFor(() => host.state.room.phase === 'lobby', 'hatgame room to return to lobby');
   });
 
-  it('restores HatGame skip capacity after the skipped clue is resolved online', async () => {
+  it('supports multiple selectable skipped clues in HatGame online', async () => {
     harnesses = await Promise.all(Array.from({ length: 4 }, () => connectHarness(baseUrl)));
     const [host, ...guests] = harnesses;
 
@@ -956,7 +970,7 @@ describe.sequential('RVLRY server integration', () => {
         teamCount: 2,
         turnDurationSeconds: 30,
         cluesPerPlayer: 3,
-        skipsPerTurn: 1
+        skipsPerTurn: 3
       }
     });
     expect(updatedSettings.ok).toBe(true);
@@ -1005,37 +1019,39 @@ describe.sequential('RVLRY server integration', () => {
     expect(startedTurn.ok).toBe(true);
 
     await waitFor(() => host.state.room.gamePublicState.stage === 'turn', 'hatgame skip test turn');
-    expect(host.state.room.gamePublicState.turn.skipsRemaining).toBe(1);
+    expect(host.state.room.gamePublicState.turn.skipsRemaining).toBe(3);
 
-    const skipped = await describerHarness.emit('game:action', {
-      code: roomCode,
-      type: 'skip-clue',
-      payload: {}
-    });
-    expect(skipped.ok).toBe(true);
+    for (let index = 0; index < 3; index += 1) {
+      const skipped = await describerHarness.emit('game:action', {
+        code: roomCode,
+        type: 'skip-clue',
+        payload: {}
+      });
+      expect(skipped.ok).toBe(true);
+    }
 
     await waitFor(
-      () => host.state.room.gamePublicState.turn.skipsRemaining === 0,
-      'hatgame skipped clue to consume capacity'
+      () =>
+        host.state.room.gamePublicState.turn.pendingSkippedCount === 3 &&
+        host.state.room.gamePublicState.turn.skipsRemaining === 0,
+      'hatgame skipped clues to queue'
     );
+    expect(describerHarness.state.privateState.skippedClues).toHaveLength(3);
 
-    await describerHarness.emit('game:action', {
-      code: roomCode,
-      type: 'mark-correct',
-      payload: {}
-    });
-    await describerHarness.emit('game:action', {
-      code: roomCode,
-      type: 'mark-correct',
-      payload: {}
-    });
-
+    const targetSkippedClue = describerHarness.state.privateState.skippedClues[1];
     const returned = await describerHarness.emit('game:action', {
       code: roomCode,
       type: 'return-skipped-clue',
-      payload: {}
+      payload: { poolIndex: targetSkippedClue.poolIndex }
     });
     expect(returned.ok).toBe(true);
+
+    await waitFor(
+      () =>
+        describerHarness.state.privateState.clue === targetSkippedClue.text &&
+        host.state.room.gamePublicState.turn.pendingSkippedCount === 2,
+      'hatgame targeted skipped clue to return'
+    );
 
     const resolved = await describerHarness.emit('game:action', {
       code: roomCode,
@@ -1046,7 +1062,7 @@ describe.sequential('RVLRY server integration', () => {
 
     await waitFor(
       () => host.state.room.gamePublicState.turn.skipsRemaining === 1,
-      'hatgame skipped clue to restore capacity'
+      'hatgame skipped clue to restore one slot'
     );
 
     const skippedAgain = await describerHarness.emit('game:action', {
@@ -1056,8 +1072,10 @@ describe.sequential('RVLRY server integration', () => {
     });
     expect(skippedAgain.ok).toBe(true);
     await waitFor(
-      () => host.state.room.gamePublicState.turn.skipsRemaining === 0,
-      'hatgame second skip to consume capacity'
+      () =>
+        host.state.room.gamePublicState.turn.pendingSkippedCount === 3 &&
+        host.state.room.gamePublicState.turn.skipsRemaining === 0,
+      'hatgame replacement skipped clue to queue'
     );
   }, 10000);
 

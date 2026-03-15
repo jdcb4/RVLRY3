@@ -37,6 +37,11 @@ const needsWhoWhatWhereBuffer = (activeTurn) =>
 const canQueueAnotherSkippedWord = (activeTurn) =>
   activeTurn.skipLimit < 0 || activeTurn.skippedWords.length < activeTurn.skipLimit;
 
+const createSkippedWordEntry = (activeTurn, word) => ({
+  id: `skip-${activeTurn.nextSkippedWordId}`,
+  word
+});
+
 const primeWhoWhatWhereNextWord = (activeTurn, buildMoreWords) => {
   if (needsWhoWhatWhereBuffer(activeTurn) && buildMoreWords) {
     const moreWords = buildMoreWords(activeTurn.category)
@@ -213,6 +218,7 @@ export const applyWhoWhatWhereAction = (
         skippedCount: 0,
         skipLimit: game.settings.skipLimit,
         skippedWords: [],
+        nextSkippedWordId: 1,
         wordHistory: []
       }
     };
@@ -262,16 +268,29 @@ export const applyWhoWhatWhereAction = (
   };
 
   if (action.type === 'return-skipped-word') {
-    if (activeTurn.currentWordSource === 'skipped') {
-      return { error: 'Already back on a skipped word' };
-    }
-
-    if (activeTurn.skippedWords.length === 0) {
+    const waitingSkippedWords = [...activeTurn.skippedWords];
+    const currentSkippedWord =
+      activeTurn.currentWordSource === 'skipped' ? activeTurn.currentSkippedWord : null;
+    const availableSkippedWords = currentSkippedWord
+      ? [currentSkippedWord, ...waitingSkippedWords]
+      : waitingSkippedWords;
+    if (availableSkippedWords.length === 0) {
       return { error: 'There are no skipped words waiting' };
     }
 
+    const targetSkippedWordId =
+      action.payload?.skippedWordId ?? availableSkippedWords[0]?.id ?? null;
+    const targetSkippedWord = availableSkippedWords.find((entry) => entry.id === targetSkippedWordId);
+    if (!targetSkippedWord) {
+      return { error: 'That skipped word is no longer available' };
+    }
+
+    activeTurn.skippedWords = waitingSkippedWords.filter((entry) => entry.id !== targetSkippedWordId);
+    if (currentSkippedWord && currentSkippedWord.id !== targetSkippedWordId) {
+      activeTurn.skippedWords.push(currentSkippedWord);
+    }
     activeTurn.currentWordSource = 'skipped';
-    activeTurn.currentSkippedWord = activeTurn.skippedWords.shift();
+    activeTurn.currentSkippedWord = targetSkippedWord;
 
     return {
       ...game,
@@ -304,6 +323,9 @@ export const applyWhoWhatWhereAction = (
 
     if (activeTurn.currentWordSource === 'skipped') {
       if (activeTurn.currentSkippedWord) {
+        if (!canQueueAnotherSkippedWord(activeTurn)) {
+          return { error: 'Return to skipped words before skipping again' };
+        }
         activeTurn.skippedWords.push(activeTurn.currentSkippedWord);
         activeTurn.currentSkippedWord = null;
       }
@@ -312,7 +334,8 @@ export const applyWhoWhatWhereAction = (
         return { error: 'Return to skipped words before skipping again' };
       }
 
-      activeTurn.skippedWords.push({ word: currentWord });
+      activeTurn.skippedWords.push(createSkippedWordEntry(activeTurn, currentWord));
+      activeTurn.nextSkippedWordId += 1;
       activeTurn.queueIndex += 1;
     }
   }

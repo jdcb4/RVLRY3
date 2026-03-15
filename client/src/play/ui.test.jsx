@@ -469,6 +469,7 @@ describe('play UI', () => {
               score: 2,
               correctCount: 2,
               skipsRemaining: 0,
+              pendingSkippedCount: 1,
               skippedCluePending: true
             }
           }
@@ -479,8 +480,9 @@ describe('play UI', () => {
           isDescriber: true,
           clue: 'Batman',
           skipsRemaining: 0,
+          pendingSkippedCount: 1,
           skippedCluePending: true,
-          skippedClueText: 'Batman',
+          skippedClues: [{ poolIndex: 7, text: 'Batman' }],
           canSkip: false,
           canReturnSkippedClue: true
         }}
@@ -511,9 +513,11 @@ describe('play UI', () => {
     ).toBeTruthy();
     expect(screen.queryByText('A skipped clue must come back before you can skip again.')).toBeNull();
 
-    await user.click(screen.getByRole('button', { name: 'Go back to skipped clue' }));
+    await user.click(screen.getByRole('button', { name: 'Batman' }));
 
-    expect(sendGameAction).toHaveBeenCalledWith('ROOM42', 'return-skipped-clue');
+    expect(sendGameAction).toHaveBeenCalledWith('ROOM42', 'return-skipped-clue', {
+      poolIndex: 7
+    });
   });
 
   it('shows the active HatGame guessers that they are up now before the turn starts', () => {
