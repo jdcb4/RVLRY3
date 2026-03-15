@@ -100,7 +100,6 @@ export function HatGameLocalView({
               Phase {session.phaseNumber}: {phaseMeta.name}
             </p>
             <h2>{context.activeDescriberName} is describing</h2>
-            <p>{phaseMeta.instruction}</p>
           </div>
 
           <div className="turn-hero">
@@ -227,20 +226,8 @@ export function HatGameLocalView({
           <p className="status-pill">
             Phase {session.phaseNumber}: {phaseMeta.name}
           </p>
-          <h2>{context.activeTeam?.name ?? 'Next team'} are up next</h2>
-          <p>{context.activeDescriberName} is the describer for this turn.</p>
+          <h2>{context.activeTeam?.name ?? 'Next team'} up next</h2>
         </div>
-
-        <SummaryChips
-          items={[
-            { label: 'Rule', value: phaseMeta.name },
-            { label: 'Describer', value: context.activeDescriberName },
-            {
-              label: 'Turn length',
-              value: `${session.settings.turnDurationSeconds}s`
-            }
-          ]}
-        />
 
         <div className="notice-card notice-card--focus">
           <strong>Current phase rule</strong>
@@ -262,9 +249,7 @@ export function HatGameLocalView({
           pill="Pass to describer"
           title={`Give the phone to ${context.activeDescriberName}`}
           targetName={context.activeDescriberName}
-          description={`${
-            context.activeTeam?.name ?? 'The next team'
-          } should be ready to guess before the clock starts.`}
+          description={`${context.activeTeam?.name ?? 'The next team'} guesses when the timer starts.`}
           isRevealed={handoffVisible}
           onReveal={() => setHandoffVisible(true)}
           onHide={() => setHandoffVisible(false)}
@@ -279,8 +264,7 @@ export function HatGameLocalView({
           }
         >
           <div className="notice-card">
-            <strong>Same clue pool, new rule</strong>
-            <p>{phaseMeta.instruction}</p>
+            <strong>{context.activeTeam?.name ?? 'Next team'} are live when you start.</strong>
           </div>
         </HandoffPanel>
       </section>

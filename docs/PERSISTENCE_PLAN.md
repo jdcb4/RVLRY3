@@ -2,6 +2,15 @@
 
 This is a planning document only. No persistence work is implemented yet.
 
+Current non-persistence refactors are already in place:
+
+- shared game-core rule modules
+- registry-driven client game composition
+- room game registry on the server
+- expanded integration and UI test coverage
+
+That means persistence can now be added onto a cleaner foundation than the original single-file approach.
+
 ## Goals
 
 - Keep rooms alive across server restarts.

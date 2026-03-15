@@ -46,25 +46,12 @@ describe('local pass-and-play session engine', () => {
 
     expect(session.stage).toBe('clues');
 
-    for (let index = 0; index < players.length * session.settings.rounds; index += 1) {
-      session = applyLocalAction(session, { type: 'advance-clue-turn' });
-    }
-
+    session = applyLocalAction(session, { type: 'complete-clue-rounds' });
     expect(session.stage).toBe('discussion');
-    session = applyLocalAction(session, { type: 'start-voting' });
-    expect(session.stage).toBe('voting');
-
-    for (const player of players) {
-      session = applyLocalAction(session, {
-        type: 'submit-vote',
-        payload: {
-          targetPlayerIds: [player.id === imposterId ? players[0].id : imposterId]
-        }
-      });
-    }
+    session = applyLocalAction(session, { type: 'reveal-imposters' });
 
     expect(session.stage).toBe('results');
-    expect(session.results.outcome).toBe('crew');
+    expect(session.results.imposterId).toBe(imposterId);
     expect(session.results.secretWord).toBe('Volcano');
   });
 

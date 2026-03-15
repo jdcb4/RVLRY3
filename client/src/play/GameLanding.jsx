@@ -81,24 +81,22 @@ export function GameLanding() {
 
   return (
     <main className="scene scene--landing">
-      <header className="scene__header scene__header--compact">
+      <header className="scene__header scene__header--compact scene__header--inline">
         <div className="scene__header-row scene__header-row--between">
           <Link aria-label="Back to RVLRY hub" className="scene__back scene__back--icon" to="/">
             <ArrowLeftIcon />
           </Link>
+          <h1 className="scene__title scene__title--inline">{game.name}</h1>
           <p className={connectionState === 'connected' ? 'status-pill' : 'status-pill status-pill--muted'}>
             {connectionState === 'connected' ? 'Server live' : 'Connecting'}
           </p>
         </div>
-        <p className="scene__eyebrow">{game.tagline}</p>
-        <h1 className="scene__title">{game.name}</h1>
       </header>
 
       <div className="panel-grid panel-grid--landing">
         <section className="panel panel--hero panel--stacked">
           <div className="panel-heading">
             <h2>{inviteRoomCode ? `Join ${inviteRoomCode}` : 'Host online'}</h2>
-            <p>{inviteRoomCode ? 'Set your name, then join this room.' : 'Create a fresh room for this game.'}</p>
           </div>
 
           {currentRoomTarget ? (
@@ -125,7 +123,6 @@ export function GameLanding() {
           ) : null}
 
           <label className="settings-field">
-            <span className="helper-text">Name</span>
             <input
               placeholder="Player name"
               value={playerName}
@@ -152,16 +149,16 @@ export function GameLanding() {
         </section>
 
         <section className="panel panel--stacked">
-          <details className="disclosure" open={Boolean(inviteRoomCode)}>
+          <details className="disclosure">
             <summary className="disclosure__summary">
               <div className="disclosure__summary-copy">
                 <div className="disclosure__summary-title">
                   <span className="disclosure__icon">
                     <InfoIcon />
                   </span>
-                  <h2>How it works</h2>
+                  <h2>How to play</h2>
                 </div>
-                <p>Three quick steps</p>
+                <p>Open only if needed</p>
               </div>
             </summary>
             <div className="disclosure__body">

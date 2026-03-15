@@ -1,6 +1,5 @@
 import { lazy, Suspense, useEffect, useState } from 'react';
 import { Link, Route, Routes, useNavigate } from 'react-router-dom';
-import { PhoneIcon, UsersIcon } from './components/Icons';
 import { games } from './games/config';
 
 const PLAYER_NAME_STORAGE_KEY = 'rvlry.playerName';
@@ -101,16 +100,10 @@ function Home() {
     <main className="hub-shell hub-shell--centered">
       <header className="hub-hero hub-hero--centered">
         <h1 className="scene__title">RVLRY</h1>
-        <p className="scene__lead">Name yourself once, join by code, or host the game you want.</p>
       </header>
 
       <section className="hub-panel">
-        <div className="panel-heading">
-          <h2>Name</h2>
-        </div>
-
         <label className="settings-field">
-          <span className="helper-text">Your name</span>
           <input
             placeholder="Player name"
             value={playerName}
@@ -125,12 +118,10 @@ function Home() {
       <section className="hub-panel">
         <div className="panel-heading">
           <h2>Join a game</h2>
-          <p>Already have a code? Jump straight in.</p>
         </div>
 
         <div className="field-stack">
           <label className="settings-field">
-            <span className="helper-text">Game code</span>
             <input
               placeholder="Six-character code"
               value={joinCode}
@@ -170,18 +161,9 @@ function Home() {
               >
                 <div className="hub-card__body">
                   <div>
-                    <p className="hub-card__eyebrow">{game.tagline}</p>
                     <h2>{game.name}</h2>
-                    <div className="facts-row facts-row--tight">
-                      <span className="fact-chip">{game.minPlayers}+ players</span>
-                      <span className="fact-chip">
-                        {hostMode === 'online' ? 'Online room' : 'Single device'}
-                      </span>
-                    </div>
+                    <p className="hub-card__description">{game.description}</p>
                   </div>
-                  <span className="hub-card__icon" aria-hidden="true">
-                    {hostMode === 'online' ? <UsersIcon /> : <PhoneIcon />}
-                  </span>
                 </div>
               </Link>
             ))}

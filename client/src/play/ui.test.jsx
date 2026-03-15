@@ -132,22 +132,16 @@ describe('play UI', () => {
       />
     );
 
-    expect(screen.getByText('Pass phone to Alex.')).toBeTruthy();
+    expect(screen.getByText('Pass the phone to Alex')).toBeTruthy();
     expect(screen.queryByText('Volcano')).toBeNull();
 
-    await user.click(screen.getByRole('button', { name: 'Alex ready' }));
+    await user.click(screen.getByRole('button', { name: 'Reveal Alex details' }));
 
     expect(screen.getByText('Crew')).toBeTruthy();
     expect(screen.getByText('Volcano')).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Lock and pass' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'I Understand' })).toBeTruthy();
 
-    await user.click(screen.getByRole('button', { name: 'Hide screen' }));
-
-    expect(screen.getByRole('button', { name: 'Lock and pass' })).toBeTruthy();
-    expect(screen.queryByText('Crew')).toBeNull();
-    expect(screen.queryByText('Imposter')).toBeNull();
-
-    await user.click(screen.getByRole('button', { name: 'Lock and pass' }));
+    await user.click(screen.getByRole('button', { name: 'I Understand' }));
 
     expect(applyAction).toHaveBeenCalledWith({ type: 'next-reveal' });
   });

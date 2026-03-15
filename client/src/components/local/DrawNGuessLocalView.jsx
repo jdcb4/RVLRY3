@@ -38,8 +38,8 @@ export function DrawNGuessLocalView({
           targetName={activePlayer.name}
           description={
             isDrawStage
-              ? 'Only this player should see the prompt before they sketch it.'
-              : 'Only this player should see the drawing before they enter a guess.'
+              ? 'Only this player should see the prompt.'
+              : 'Only this player should see the drawing.'
           }
           isRevealed={isRevealed}
           onReveal={() => setIsRevealed(true)}

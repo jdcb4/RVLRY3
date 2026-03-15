@@ -1,74 +1,83 @@
 # Joe Playtest Review
 
-## Implemented now
+This document records the playtest notes from Joe and how they landed after review.
 
-- Imposter pass-and-play role reveals no longer leave the "Lock and pass" action stranded after hiding the screen, and the reveal action now hides before advancing to avoid exposing the next player's secret.
-- Pass-and-play back navigation now returns from an active round to setup first, instead of jumping straight back to the hub.
-- Local add-player naming now fills the next open `Player N` slot instead of creating duplicates after removals.
-- Local Imposter now requires at least 3 players in setup and start validation, matching the actual gameplay needs better than the old 2-player allowance.
-- Local DrawNGuess now rotates the player order on "Play another round" so the same people are not stuck drawing or guessing first every time.
-- HatGame "Give me suggestions" now fills blank clue slots first instead of overwriting clues the player already typed, in both online and pass-and-play flows.
-- Online room rejoin now restores host ownership when the original host refreshes and comes back with the same player token.
-- HatGame skipped-clue messaging now distinguishes between "a skipped clue is waiting" and "you are back on the skipped clue", instead of always exposing or implying the same state.
+## Implemented from this review
 
-## Needs your call
+### Shared / global
+
+- Host refresh now restores host ownership when the original host rejoins with the same player token.
+- The roadmap now tracks “change game inside the same online lobby” as a future feature.
+
+### Pass-and-play
+
+- Back navigation from active local flows returns to setup instead of jumping straight to the hub.
+- Hidden-information handoffs were tightened so the next player does not flash on reveal transitions.
+- Default local player naming now fills the next free `Player N` slot instead of duplicating names after removals.
 
 ### Imposter
 
-- Tie resolution:
-  Right now any tie means the imposter survives. That is internally consistent, but if you want "crew tie without the imposter involved" to resolve differently, that is a rules change rather than a bug fix.
-- Clue restrictions:
-  Requests to block emojis or remove clue length limits are game-design choices. At the moment the app permits normal Unicode text and has a local clue length cap.
-- Clue feed default open state:
-  Reasonable UX improvement, but it is preference/presentation rather than correctness.
+- Minimum local player count now matches the game’s real needs.
+- “Lock and pass” remains available after rehiding the screen.
+- The game is now framed around spoken clue rounds instead of app-entered clue text.
 
 ### WhoWhatWhere
 
-- Auto-balance randomness:
-  The current behavior is deterministic round-robin balancing. Changing it to chunked or randomized distributions is a product choice.
-- Returning to skipped words:
-  Adding a HatGame-style "return to skipped word" mechanic would materially change the turn flow and scoring rhythm.
-- End-of-turn or end-of-game word review:
-  Useful feature, but it adds recap UI and possibly more persisted turn data.
-- 30-word round cap:
-  Worth confirming whether that cap is intentional or whether you want rounds to end only on timer/turn completion.
-- Hide-screen affordance after the describer is revealed:
-  This reads more like UI tightening than a bug, and could be standardized across pass-and-play screens if you want it changed.
+- Skip penalties were replaced with a return-to-skipped-word flow.
+- The local describer-ready hide affordance was removed after reveal.
+- Word buffering now supports continuing beyond the initial visible batch instead of behaving like 30 is a hard round cap.
 
 ### DrawNGuess
 
-- Lobby options for timers/rounds:
-  That is feature expansion rather than a bug fix. Current DrawNGuess is still a single-chain round.
-- Guesser hide-screen controls:
-  Similar to the WhoWhatWhere note above, this is mainly a UI pattern decision.
+- “Play another round” rotates local player order.
+- Local guesser hide controls were tightened.
+- Round-length settings were added.
+- Online mode was rebuilt around simultaneous books instead of a single sequential chain.
 
 ### HatGame
 
-- Emoji restriction in clues:
-  This is a content-policy choice. Blocking emoji/personality symbols may reduce abuse, but it also removes harmless expressive entries.
-- Re-shuffling when phases restart:
-  The playtester felt the list became predictable with a small clue pool. If you want stronger unpredictability, we can make the re-phase shuffle more visibly varied or avoid repeating recent order.
-- Round/turn progress on the gameplay screen:
-  This is a legitimate enhancement, but it needs a design choice about whether to show "team turn number", "phase progress", "round count", or all three.
-- Extra spacing around HatGame clue actions:
-  This is UI polish rather than a correctness issue.
+- “Give me suggestions” now fills blank clue slots rather than overwriting typed clues.
+- Skipped-clue messaging now distinguishes between:
+  - skipped clue waiting
+  - back on skipped clue
+- Pass-and-play clue entry is now private, phone-pass setup instead of one shared clue wall.
+- Remaining clue order is randomized from the active unguessed pool.
 
-### Global / Online flow
+## Suggestions that were intentionally not implemented
 
-- Change game from within the same online lobby:
-  Valuable feature, but it is a product/workflow expansion with backend implications for room reset, settings migration, and player consent.
-- Undo / reinstate kicked players:
-  The current permanent block is intentional for safety. Supporting reversal would need a host-managed removed-player list or a scoped temporary kick model.
+These items were reviewed and left as product-direction choices or explicitly ignored.
 
-## Not clearly reproducible yet
+### Imposter
 
-- VPN / refresh / browser registration issues in online rooms:
-  The notes strongly point to host-network conditions rather than a stable app bug. Worth retesting without VPN before spending engineering time here.
-- DrawNGuess "end of round goes to lobby instead":
-  I do not yet have a reproducible path from the notes alone.
-- HatGame "save clues would not register" one-off:
-  Since it was not reproducible and a refresh fixed it, I would treat this as watch-list material unless it happens again.
-- HatGame player rejoining into Team 1:
-  The current room rejoin code already tries to preserve team membership. If this happens again, I would want exact steps, especially whether team counts changed before the rejoin.
-- Imposter "no character limit on clue":
-  Current local clue entry already has a length limit, so this may have been observed in a different context or before a recent change.
+- Emoji restriction in clues
+- Removing clue limits altogether
+- Alternative tie-resolution rules beyond “imposters survive unresolved votes”
+
+### WhoWhatWhere
+
+- Changing auto-balance from deterministic round-robin to chunked or randomized assignment
+- End-of-turn or end-of-game word review
+
+### HatGame
+
+- Emoji restriction in clues
+- Additional spacing-only lobby polish requests
+
+### Moderation / room controls
+
+- Undo or reinstate kicked players
+
+## Suggestions still worth future product input
+
+- In-lobby game switching without rebuilding the room
+- Whether WhoWhatWhere should later expose a recap or review mode
+- Whether Imposter vote ties should keep the current behavior permanently or adopt a custom house-rule option
+- Whether removed players should have a softer block model in private/friendly rooms
+
+## Notes that were not clearly reproducible
+
+- VPN / browser-specific online registration issues
+- One-off HatGame clue-save glitch that resolved on refresh
+- Older reports about DrawNGuess returning to lobby mid-round
+
+Those were treated as watch-list items rather than confirmed bugs because they did not have a stable reproduction path.

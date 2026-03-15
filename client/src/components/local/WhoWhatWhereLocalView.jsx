@@ -71,7 +71,6 @@ export function WhoWhatWhereLocalView({
           <div className="panel-heading">
             <p className="status-pill">Live turn</p>
             <h2>{context.activeDescriberName} is describing</h2>
-            <p>Keep the phone with the describer while the team guesses out loud.</p>
           </div>
 
           <div className="turn-hero">
@@ -88,9 +87,6 @@ export function WhoWhatWhereLocalView({
           <div className="role-card">
             <span className="helper-text">Current word</span>
             <strong className="role-card__title">{currentWord}</strong>
-            <span className="role-card__body">
-              Score it when they get it. Skipped words wait in a return queue.
-            </span>
           </div>
 
           <SummaryChips
@@ -183,31 +179,14 @@ export function WhoWhatWhereLocalView({
       <section className="panel panel--hero panel--stacked gameplay-primary">
         <div className="panel-heading">
           <p className="status-pill">Between turns</p>
-          <h2>{context.activeTeam?.name ?? 'Next team'} are up next</h2>
-          <p>{context.activeDescriberName} is the current describer for this turn.</p>
+          <h2>{context.activeTeam?.name ?? 'Next team'} up next</h2>
         </div>
-
-        <SummaryChips
-          items={[
-            {
-              label: 'Round',
-              value: `${session.roundNumber} / ${session.settings.totalRounds}`
-            },
-            { label: 'Describer', value: context.activeDescriberName },
-            {
-              label: 'Turn length',
-              value: `${session.settings.turnDurationSeconds}s`
-            }
-          ]}
-        />
 
         <HandoffPanel
           pill="Pass to describer"
           title={`Give the phone to ${context.activeDescriberName}`}
           targetName={context.activeDescriberName}
-          description={`${
-            context.activeTeam?.name ?? 'The next team'
-          } should be ready to guess before the clock starts.`}
+          description={`${context.activeTeam?.name ?? 'The next team'} guesses when the timer starts.`}
           isRevealed={handoffVisible}
           onReveal={() => setHandoffVisible(true)}
           onHide={() => setHandoffVisible(false)}
@@ -223,7 +202,6 @@ export function WhoWhatWhereLocalView({
         >
           <div className="notice-card notice-card--focus">
             <strong>{context.activeTeam?.name ?? 'Next team'} are live when you start.</strong>
-            <p>The timer starts with the first word.</p>
           </div>
         </HandoffPanel>
       </section>

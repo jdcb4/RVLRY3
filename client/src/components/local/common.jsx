@@ -58,7 +58,9 @@ export function LocalPlayersEditor({
   onRemovePlayer,
   onAutoBalance,
   minimumPlayers = 2,
-  showHeading = true
+  showHeading = true,
+  showAddButton = true,
+  showRemoveButton = true
 }) {
   return (
     <section className="panel panel--stacked">
@@ -69,20 +71,24 @@ export function LocalPlayersEditor({
         </div>
       ) : null}
 
-      <div className="local-toolbar">
-        <button
-          className="secondary-action"
-          disabled={players.length >= LOCAL_PLAYER_LIMIT}
-          onClick={onAddPlayer}
-        >
-          Add player
-        </button>
-        {teams.length > 0 && (
-          <button className="secondary-action" onClick={onAutoBalance}>
-            Auto-balance teams
-          </button>
-        )}
-      </div>
+      {showAddButton || (teams.length > 0 && onAutoBalance) ? (
+        <div className="local-toolbar">
+          {showAddButton ? (
+            <button
+              className="secondary-action"
+              disabled={players.length >= LOCAL_PLAYER_LIMIT}
+              onClick={onAddPlayer}
+            >
+              Add player
+            </button>
+          ) : null}
+          {teams.length > 0 && onAutoBalance ? (
+            <button className="secondary-action" onClick={onAutoBalance}>
+              Auto-balance teams
+            </button>
+          ) : null}
+        </div>
+      ) : null}
 
       <div className="local-player-grid">
         {players.map((player, index) => (
@@ -112,13 +118,15 @@ export function LocalPlayersEditor({
               </label>
             )}
 
-            <button
-              className="secondary-action"
-              disabled={players.length <= minimumPlayers}
-              onClick={() => onRemovePlayer(player.id)}
-            >
-              Remove
-            </button>
+            {showRemoveButton ? (
+              <button
+                className="secondary-action"
+                disabled={players.length <= minimumPlayers}
+                onClick={() => onRemovePlayer(player.id)}
+              >
+                Remove
+              </button>
+            ) : null}
           </article>
         ))}
       </div>
@@ -305,7 +313,7 @@ export function ImposterSettingsCard({ settings, onChange, showHeading = true })
 
       <div className="settings-grid">
         <label className="settings-field">
-          <span className="helper-text">Spoken rounds</span>
+          <span className="helper-text">Rounds</span>
           <select
             value={settings.rounds}
             onChange={(event) =>

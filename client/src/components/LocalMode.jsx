@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useAudioCues } from '../audio/AudioCueContext';
 import { SoundToggle } from '../audio/SoundToggle';
-import { SummaryChips } from '../components/gameplay/SharedGameUi';
 import { ArrowLeftIcon } from '../components/Icons';
 import { getGameById } from '../games/config';
 import {
@@ -28,6 +27,7 @@ import {
 } from './local/common';
 import {
   EMPTY_TEAMS,
+  LOCAL_PLAYER_LIMIT,
   buildEmptyHatGameClues,
   createLocalPlayerId,
   getNextLocalPlayerName,
@@ -60,7 +60,6 @@ export function LocalMode() {
   const [busyAction, setBusyAction] = useState('');
   const [error, setError] = useState('');
   const [playersPanelOpen, setPlayersPanelOpen] = useState(true);
-  const [optionsPanelOpen, setOptionsPanelOpen] = useState(false);
   const [cluesPanelOpen, setCluesPanelOpen] = useState(gameId === 'hatgame');
 
   useEffect(() => {
@@ -81,7 +80,6 @@ export function LocalMode() {
     setBusyAction('');
     setError('');
     setPlayersPanelOpen(true);
-    setOptionsPanelOpen(false);
     setCluesPanelOpen(gameId === 'hatgame');
   }, [gameId]);
 
@@ -294,6 +292,38 @@ export function LocalMode() {
     );
   };
 
+  const handleSetPlayerCount = useCallback((nextCount) => {
+    const normalizedCount = Number.parseInt(nextCount, 10);
+    if (!Number.isFinite(normalizedCount) || normalizedCount < 1) {
+      return;
+    }
+
+    replacePlayers((currentPlayers) => {
+      if (normalizedCount === currentPlayers.length) {
+        return currentPlayers;
+      }
+
+      if (normalizedCount < currentPlayers.length) {
+        return currentPlayers.slice(0, normalizedCount);
+      }
+
+      const nextPlayers = [...currentPlayers];
+      while (nextPlayers.length < normalizedCount) {
+        nextPlayers.push({
+          id: createLocalPlayerId(),
+          seat: nextPlayers.length,
+          name: getNextLocalPlayerName(nextPlayers),
+          teamId:
+            teams.length > 0
+              ? teams[nextPlayers.length % teams.length]?.id ?? null
+              : null
+        });
+      }
+
+      return nextPlayers;
+    });
+  }, [replacePlayers, teams]);
+
   const handleUpdateTeamSetting = (key, value) => {
     const nextSettings = {
       ...settings,
@@ -414,7 +444,7 @@ export function LocalMode() {
 
   return (
     <main className="scene scene--local">
-      <header className="scene__header scene__header--compact">
+      <header className="scene__header scene__header--compact scene__header--inline">
         <div className="scene__header-row scene__header-row--between">
           <button
             type="button"
@@ -431,11 +461,9 @@ export function LocalMode() {
           >
             <ArrowLeftIcon />
           </button>
+          <h1 className="scene__title scene__title--inline">{game.name}</h1>
           <SoundToggle compact />
         </div>
-        <p className="scene__eyebrow">Pass and play</p>
-        <h1 className="scene__title">{game.name}</h1>
-        <p className="scene__lead">{gameModule.localLead}</p>
       </header>
 
       {!session && !hatClueEntry ? (
@@ -443,68 +471,34 @@ export function LocalMode() {
           <section className="panel panel--hero panel--stacked">
             <div className="panel-heading">
               <h2>Setup</h2>
-              <p>Name the table, set teams if needed, then start.</p>
             </div>
 
-            <SummaryChips
-              items={[
-                { label: 'Players', value: players.length },
-                { label: 'Mode', value: 'Single device' },
-                gameModule.requiresTeams
-                  ? { label: 'Teams', value: settings.teamCount }
-                  : { label: 'Word type', value: getLocalWordType(game.id) }
-              ]}
-            />
+            <div className="settings-grid">
+              <label className="settings-field">
+                <span className="helper-text">Players</span>
+                <select
+                  value={players.length}
+                  onChange={(event) => handleSetPlayerCount(event.target.value)}
+                >
+                  {Array.from(
+                    { length: LOCAL_PLAYER_LIMIT - (game.minPlayers ?? 2) + 1 },
+                    (_, index) => (game.minPlayers ?? 2) + index
+                  ).map((count) => (
+                    <option key={count} value={count}>
+                      {count} players
+                    </option>
+                  ))}
+                </select>
+              </label>
 
-            {SettingsCard ? (
-              <details
-                className="panel disclosure setup-disclosure"
-                open={optionsPanelOpen}
-                onToggle={(event) => setOptionsPanelOpen(event.currentTarget.open)}
-              >
-                <summary className="disclosure__summary">
-                  <div className="disclosure__summary-copy">
-                    <h2>Options</h2>
-                    <p>
-                      {gameId === 'hatgame'
-                        ? `${settings.turnDurationSeconds}s turns, ${settings.cluesPerPlayer} clues each`
-                        : gameId === 'imposter'
-                          ? `${settings.rounds} spoken rounds, ${settings.imposterCount} imposter${settings.imposterCount === 1 ? '' : 's'}`
-                          : gameId === 'drawnguess'
-                            ? `${settings.roundDurationSeconds}s rounds`
-                        : `${settings.turnDurationSeconds}s turns${
-                            settings.totalRounds ? `, ${settings.totalRounds} rounds` : ''
-                          }`}
-                    </p>
-                  </div>
-                </summary>
-                <div className="disclosure__body">
-                  <SettingsCard
-                    settings={settings}
-                    onChange={handleUpdateTeamSetting}
-                    showHeading={false}
-                  />
-                </div>
-              </details>
-            ) : null}
-
-            {error && <p className="connection-banner connection-banner--error">{error}</p>}
-
-            <div className="actions actions--stretch">
-              <button disabled={busyAction === 'start-session' || Boolean(startHint)} onClick={startSession}>
-                {busyAction === 'start-session'
-                  ? 'Preparing round'
-                  : gameId === 'hatgame'
-                    ? 'Start private clue entry'
-                    : 'Start local round'}
-              </button>
+              {SettingsCard ? (
+                <SettingsCard
+                  settings={settings}
+                  onChange={handleUpdateTeamSetting}
+                  showHeading={false}
+                />
+              ) : null}
             </div>
-            <p className="helper-text">
-              {startHint ??
-                (gameModule.requiresHatClues
-                  ? 'Start when players are set. Clues will be collected privately after this.'
-                  : 'Ready once the names look right.')}
-            </p>
           </section>
 
           <details
@@ -536,6 +530,8 @@ export function LocalMode() {
                 }
                 minimumPlayers={game.minPlayers ?? 2}
                 showHeading={false}
+                showAddButton={false}
+                showRemoveButton={false}
               />
             </div>
           </details>
@@ -565,6 +561,26 @@ export function LocalMode() {
               </div>
             </details>
           )}
+
+          <div className="local-action-dock">
+            {error ? <p className="connection-banner connection-banner--error">{error}</p> : null}
+            <button
+              disabled={busyAction === 'start-session' || Boolean(startHint)}
+              onClick={startSession}
+            >
+              {busyAction === 'start-session'
+                ? 'Preparing round'
+                : gameId === 'hatgame'
+                  ? 'Start private clue entry'
+                  : 'Start local round'}
+            </button>
+            <p className="helper-text">
+              {startHint ??
+                (gameModule.requiresHatClues
+                  ? 'Clues will be collected privately after this.'
+                  : 'Ready once the names look right.')}
+            </p>
+          </div>
         </div>
       ) : !session && hatClueEntry ? (
         <>

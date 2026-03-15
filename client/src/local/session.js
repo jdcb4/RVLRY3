@@ -409,6 +409,12 @@ const buildImposterResults = (session, votes) => {
   };
 };
 
+const buildImposterRevealResults = (session) => ({
+  imposterIds: session.imposterIds ?? [],
+  imposterId: session.imposterIds?.[0] ?? null,
+  secretWord: session.prompt
+});
+
 function applyLocalImposterAction(session, action) {
   if (action.type === 'next-reveal') {
     if (session.stage !== 'reveal') {
@@ -467,6 +473,18 @@ function applyLocalImposterAction(session, action) {
     };
   }
 
+  if (action.type === 'complete-clue-rounds') {
+    if (session.stage !== 'clues') {
+      return { error: 'Clue turns are not active right now' };
+    }
+
+    return {
+      ...session,
+      stage: 'discussion',
+      discussionReady: false
+    };
+  }
+
   if (action.type === 'start-voting') {
     if (session.stage !== 'discussion') {
       return { error: 'Discussion is not active right now' };
@@ -476,6 +494,18 @@ function applyLocalImposterAction(session, action) {
       ...session,
       stage: 'voting',
       votingIndex: 0
+    };
+  }
+
+  if (action.type === 'reveal-imposters') {
+    if (session.stage !== 'discussion') {
+      return { error: 'Discussion is not active right now' };
+    }
+
+    return {
+      ...session,
+      stage: 'results',
+      results: buildImposterRevealResults(session)
     };
   }
 
