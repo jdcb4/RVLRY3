@@ -72,7 +72,7 @@ export function WhoWhatWhereLocalView({
 
     return (
       <div className="gameplay-stack">
-        <section className="panel panel--hero panel--stacked gameplay-primary">
+        <section className="panel panel--hero panel--stacked gameplay-primary gameplay-primary--with-fixed-dock">
           <div className="turn-panel__topbar">
             <div className="panel-heading">
               <h2>{context.activeTeam?.name ?? 'Team'} up</h2>
@@ -138,7 +138,10 @@ export function WhoWhatWhereLocalView({
             </div>
           ) : null}
 
-          <div className="turn-action-dock">
+        </section>
+
+        <div className="turn-action-viewport-dock">
+          <div className="turn-action-dock turn-action-dock--fixed">
             <button
               className="secondary-action"
               onClick={async () => {
@@ -157,7 +160,7 @@ export function WhoWhatWhereLocalView({
               Correct
             </button>
           </div>
-        </section>
+        </div>
       </div>
     );
   }

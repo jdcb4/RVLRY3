@@ -466,6 +466,109 @@ describe.sequential('RVLRY server integration', () => {
     await waitFor(() => host.state.room.phase === 'lobby', 'whowhatwhere room to return to lobby');
   });
 
+  it('restores WhoWhatWhere skip capacity after a skipped word is resolved online', async () => {
+    harnesses = await Promise.all(Array.from({ length: 4 }, () => connectHarness(baseUrl)));
+    const [host, ...guests] = harnesses;
+
+    const createdRoom = await host.emit('room:create', {
+      gameId: 'whowhatwhere',
+      playerName: 'Alex',
+      playerToken: 'www-skip-host'
+    });
+    host.playerId = createdRoom.playerId;
+    const roomCode = createdRoom.code;
+
+    const guestNames = ['Blair', 'Casey', 'Dev'];
+    for (const [index, guest] of guests.entries()) {
+      const joinedRoom = await guest.emit('room:join', {
+        code: roomCode,
+        playerName: guestNames[index],
+        playerToken: `www-skip-guest-${index}`
+      });
+      guest.playerId = joinedRoom.playerId;
+    }
+
+    await waitFor(() => host.state.room?.players?.length === 4, 'whowhatwhere skip test players to join');
+
+    for (const harness of harnesses) {
+      const response = await harness.emit('room:ready', {
+        code: roomCode,
+        ready: true
+      });
+      expect(response.ok).toBe(true);
+    }
+
+    const started = await host.emit('room:start', { code: roomCode });
+    expect(started.ok).toBe(true);
+
+    await waitFor(
+      () => harnesses.every((harness) => harness.state.room?.phase === 'in-progress' && harness.state.privateState),
+      'whowhatwhere skip test match to start'
+    );
+
+    const describerHarness = harnesses.find(
+      (harness) => harness.state.privateState?.canStartTurn === true
+    );
+    expect(describerHarness).toBeTruthy();
+
+    const startedTurn = await describerHarness.emit('game:action', {
+      code: roomCode,
+      type: 'start-turn',
+      payload: {}
+    });
+    expect(startedTurn.ok).toBe(true);
+
+    await waitFor(() => host.state.room.gamePublicState.stage === 'turn', 'whowhatwhere skip test turn');
+
+    expect(host.state.room.gamePublicState.turn.pendingSkippedCount).toBe(0);
+
+    const skipped = await describerHarness.emit('game:action', {
+      code: roomCode,
+      type: 'skip-word',
+      payload: {}
+    });
+    expect(skipped.ok).toBe(true);
+    await waitFor(
+      () => host.state.room.gamePublicState.turn.pendingSkippedCount === 1,
+      'whowhatwhere skipped word to queue'
+    );
+
+    await describerHarness.emit('game:action', {
+      code: roomCode,
+      type: 'mark-correct',
+      payload: {}
+    });
+
+    const returned = await describerHarness.emit('game:action', {
+      code: roomCode,
+      type: 'return-skipped-word',
+      payload: {}
+    });
+    expect(returned.ok).toBe(true);
+
+    await describerHarness.emit('game:action', {
+      code: roomCode,
+      type: 'mark-correct',
+      payload: {}
+    });
+
+    await waitFor(
+      () => host.state.room.gamePublicState.turn.pendingSkippedCount === 0,
+      'whowhatwhere skipped word to clear'
+    );
+
+    const skippedAgain = await describerHarness.emit('game:action', {
+      code: roomCode,
+      type: 'skip-word',
+      payload: {}
+    });
+    expect(skippedAgain.ok).toBe(true);
+    await waitFor(
+      () => host.state.room.gamePublicState.turn.pendingSkippedCount === 1,
+      'whowhatwhere second skip to queue'
+    );
+  });
+
   it('rebalances team games from the lobby for the host', async () => {
     harnesses = await Promise.all(Array.from({ length: 4 }, () => connectHarness(baseUrl)));
     const [host, ...guests] = harnesses;
@@ -822,6 +925,141 @@ describe.sequential('RVLRY server integration', () => {
     expect(returned.ok).toBe(true);
     await waitFor(() => host.state.room.phase === 'lobby', 'hatgame room to return to lobby');
   });
+
+  it('restores HatGame skip capacity after the skipped clue is resolved online', async () => {
+    harnesses = await Promise.all(Array.from({ length: 4 }, () => connectHarness(baseUrl)));
+    const [host, ...guests] = harnesses;
+
+    const createdRoom = await host.emit('room:create', {
+      gameId: 'hatgame',
+      playerName: 'Hana',
+      playerToken: 'hat-skip-host'
+    });
+    host.playerId = createdRoom.playerId;
+    const roomCode = createdRoom.code;
+
+    const guestNames = ['Ivy', 'Jules', 'Kye'];
+    for (const [index, guest] of guests.entries()) {
+      const joinedRoom = await guest.emit('room:join', {
+        code: roomCode,
+        playerName: guestNames[index],
+        playerToken: `hat-skip-guest-${index}`
+      });
+      guest.playerId = joinedRoom.playerId;
+    }
+
+    await waitFor(() => host.state.room?.players?.length === 4, 'hatgame skip test players to join');
+
+    const updatedSettings = await host.emit('room:update-settings', {
+      code: roomCode,
+      settings: {
+        teamCount: 2,
+        turnDurationSeconds: 30,
+        cluesPerPlayer: 3,
+        skipsPerTurn: 1
+      }
+    });
+    expect(updatedSettings.ok).toBe(true);
+
+    const clueSets = [
+      ['Albert Einstein', 'Wonder Woman', 'Sherlock Holmes'],
+      ['Beyonce', 'Black Panther', 'Darth Vader'],
+      ['Hermione Granger', 'Spider-Man', 'Oprah Winfrey'],
+      ['Batman', 'Taylor Swift', 'Indiana Jones']
+    ];
+
+    for (const [index, harness] of harnesses.entries()) {
+      const response = await harness.emit('room:submit-hat-clues', {
+        code: roomCode,
+        clues: clueSets[index]
+      });
+      expect(response.ok).toBe(true);
+    }
+
+    for (const harness of harnesses) {
+      const response = await harness.emit('room:ready', {
+        code: roomCode,
+        ready: true
+      });
+      expect(response.ok).toBe(true);
+    }
+
+    const started = await host.emit('room:start', { code: roomCode });
+    expect(started.ok).toBe(true);
+
+    await waitFor(
+      () => harnesses.every((harness) => harness.state.room?.phase === 'in-progress' && harness.state.privateState),
+      'hatgame skip test match to start'
+    );
+
+    const describerHarness = harnesses.find(
+      (harness) => harness.state.privateState?.canStartTurn === true
+    );
+    expect(describerHarness).toBeTruthy();
+
+    const startedTurn = await describerHarness.emit('game:action', {
+      code: roomCode,
+      type: 'start-turn',
+      payload: {}
+    });
+    expect(startedTurn.ok).toBe(true);
+
+    await waitFor(() => host.state.room.gamePublicState.stage === 'turn', 'hatgame skip test turn');
+    expect(host.state.room.gamePublicState.turn.skipsRemaining).toBe(1);
+
+    const skipped = await describerHarness.emit('game:action', {
+      code: roomCode,
+      type: 'skip-clue',
+      payload: {}
+    });
+    expect(skipped.ok).toBe(true);
+
+    await waitFor(
+      () => host.state.room.gamePublicState.turn.skipsRemaining === 0,
+      'hatgame skipped clue to consume capacity'
+    );
+
+    await describerHarness.emit('game:action', {
+      code: roomCode,
+      type: 'mark-correct',
+      payload: {}
+    });
+    await describerHarness.emit('game:action', {
+      code: roomCode,
+      type: 'mark-correct',
+      payload: {}
+    });
+
+    const returned = await describerHarness.emit('game:action', {
+      code: roomCode,
+      type: 'return-skipped-clue',
+      payload: {}
+    });
+    expect(returned.ok).toBe(true);
+
+    const resolved = await describerHarness.emit('game:action', {
+      code: roomCode,
+      type: 'mark-correct',
+      payload: {}
+    });
+    expect(resolved.ok).toBe(true);
+
+    await waitFor(
+      () => host.state.room.gamePublicState.turn.skipsRemaining === 1,
+      'hatgame skipped clue to restore capacity'
+    );
+
+    const skippedAgain = await describerHarness.emit('game:action', {
+      code: roomCode,
+      type: 'skip-clue',
+      payload: {}
+    });
+    expect(skippedAgain.ok).toBe(true);
+    await waitFor(
+      () => host.state.room.gamePublicState.turn.skipsRemaining === 0,
+      'hatgame second skip to consume capacity'
+    );
+  }, 10000);
 
   it('keeps the same HatGame timer when a turn rolls into the next phase', async () => {
     harnesses = await Promise.all(Array.from({ length: 4 }, () => connectHarness(baseUrl)));

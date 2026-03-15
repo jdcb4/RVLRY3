@@ -56,6 +56,14 @@ export const isHatGameShowingSkippedClue = (activeTurn) => {
   return currentClue?.poolIndex === activeTurn.skippedCluePoolIndex;
 };
 
+const getHatGamePendingSkippedCount = (activeTurn) =>
+  activeTurn?.skippedCluePoolIndex === null ? 0 : 1;
+
+const syncHatGameSkipState = (activeTurn, skipLimit) => ({
+  ...activeTurn,
+  skipsRemaining: Math.max(skipLimit - getHatGamePendingSkippedCount(activeTurn), 0)
+});
+
 export const createHatGame = ({ teams, settings, cluePool }) => {
   const nextTeams = cloneTeams(teams).map((team) => ({ ...team, score: 0 }));
   const teamOrder = nextTeams.map((team) => team.id);
@@ -116,7 +124,8 @@ const advanceHatGamePhaseWithinTurn = (game, activeTurn, rng) => {
       clueQueue: nextQueue,
       queueIndex: 0,
       skippedCluePoolIndex: null,
-      skippedClueText: null
+      skippedClueText: null,
+      skipsRemaining: game.settings.skipsPerTurn
     }
   };
 };
@@ -263,7 +272,7 @@ export const applyHatGameAction = (
     return {
       ...game,
       stage: 'turn',
-      activeTurn: {
+      activeTurn: syncHatGameSkipState({
         startedAt: toIso(startedAt),
         endsAt: toIso(startedAt + game.settings.turnDurationSeconds * 1000),
         durationSeconds: game.settings.turnDurationSeconds,
@@ -276,7 +285,7 @@ export const applyHatGameAction = (
         skippedCluePoolIndex: null,
         skippedClueText: null,
         clueHistory: []
-      }
+      }, game.settings.skipsPerTurn)
     };
   }
 
@@ -338,6 +347,7 @@ export const applyHatGameAction = (
     }
 
     activeTurn.queueIndex += 1;
+    Object.assign(activeTurn, syncHatGameSkipState(activeTurn, game.settings.skipsPerTurn));
   }
 
   if (action.type === 'skip-clue') {
@@ -350,7 +360,6 @@ export const applyHatGameAction = (
     }
 
     activeTurn.skippedCount += 1;
-    activeTurn.skipsRemaining -= 1;
     activeTurn.skippedCluePoolIndex = currentClue.poolIndex;
     activeTurn.skippedClueText = currentClue.text;
     activeTurn.clueHistory.push({
@@ -362,6 +371,7 @@ export const applyHatGameAction = (
 
     const [skippedClue] = activeTurn.clueQueue.splice(activeTurn.queueIndex, 1);
     activeTurn.clueQueue.push(skippedClue);
+    Object.assign(activeTurn, syncHatGameSkipState(activeTurn, game.settings.skipsPerTurn));
   }
 
   if (action.type === 'return-skipped-clue') {
@@ -380,6 +390,8 @@ export const applyHatGameAction = (
       const [skippedClue] = activeTurn.clueQueue.splice(skippedIndex, 1);
       activeTurn.clueQueue.splice(activeTurn.queueIndex, 0, skippedClue);
     }
+
+    Object.assign(activeTurn, syncHatGameSkipState(activeTurn, game.settings.skipsPerTurn));
   }
 
   if (!activeTurn.clueQueue[activeTurn.queueIndex]) {

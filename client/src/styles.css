@@ -1292,6 +1292,10 @@ summary:focus-visible {
   gap: 1rem;
 }
 
+.gameplay-primary--with-fixed-dock {
+  padding-bottom: calc(8.5rem + env(safe-area-inset-bottom, 0px));
+}
+
 .turn-panel__topbar {
   display: flex;
   align-items: flex-start;
@@ -1299,15 +1303,22 @@ summary:focus-visible {
   gap: 0.75rem;
 }
 
-.turn-action-dock {
-  position: sticky;
+.turn-action-viewport-dock {
+  position: fixed;
+  right: 0;
   bottom: 0;
-  z-index: 12;
+  left: 0;
+  z-index: 18;
+  padding: 2rem 0 max(0.75rem, env(safe-area-inset-bottom, 0px));
+  background: linear-gradient(180deg, rgba(13, 27, 30, 0), rgba(13, 27, 30, 0.88) 36%, #0d1b1e 100%);
+  pointer-events: none;
+}
+
+.turn-action-dock {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 0.75rem;
-  padding: 1rem 0 calc(1rem + env(safe-area-inset-bottom, 0px));
-  margin-top: auto;
+  padding: 1rem 0 0;
 }
 
 .turn-action-dock::before {
@@ -1321,6 +1332,18 @@ summary:focus-visible {
     rgba(13, 27, 30, 0.94) 36%,
     rgba(13, 27, 30, 1) 100%
   );
+}
+
+.turn-action-dock--fixed {
+  position: relative;
+  width: min(1040px, calc(100% - 1rem));
+  margin: 0 auto;
+  padding-top: 0;
+  pointer-events: auto;
+}
+
+.turn-action-dock--fixed::before {
+  display: none;
 }
 
 .disclosure {

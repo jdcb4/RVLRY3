@@ -84,6 +84,9 @@ describe('local pass-and-play session engine', () => {
     session = applyLocalAction(session, { type: 'return-skipped-word' });
     expect(session.activeTurn.currentWordSource).toBe('skipped');
     session = applyLocalAction(session, { type: 'mark-correct' });
+    session = applyLocalAction(session, { type: 'skip-word' });
+    expect(session.activeTurn.currentWordSource).toBe('skipped');
+    expect(session.activeTurn.currentSkippedWord).toEqual({ word: 'Panda' });
     session = applyLocalAction(session, { type: 'end-turn' });
 
     expect(session.stage).toBe('ready');
@@ -297,6 +300,50 @@ describe('local pass-and-play session engine', () => {
     expect(nextQueue).toContain(skippedClue);
     expect(nextQueue).toContain(unfinishedClue);
     expect(nextQueue).not.toContain(initialQueue[0]);
+  });
+
+  it('restores HatGame skip capacity after the skipped clue is guessed', () => {
+    const players = rebalanceWhoWhatWherePlayers(createLocalPlayers(4), 2);
+    const settings = {
+      ...DEFAULT_LOCAL_HATGAME_SETTINGS,
+      teamCount: 2,
+      cluesPerPlayer: 1,
+      skipsPerTurn: 1
+    };
+
+    let session = buildLocalSession({
+      gameId: 'hatgame',
+      players,
+      settings,
+      lobbyState: {
+        clueSubmissions: {
+          [players[0].id]: { clues: ['Albert Einstein'] },
+          [players[1].id]: { clues: ['Beyonce'] },
+          [players[2].id]: { clues: ['Spider-Man'] },
+          [players[3].id]: { clues: ['Batman'] }
+        }
+      },
+      rng: () => 0.5
+    });
+
+    session = applyLocalAction(session, {
+      type: 'start-turn',
+      payload: {}
+    });
+
+    session = applyLocalAction(session, { type: 'skip-clue' });
+    expect(session.activeTurn.skipsRemaining).toBe(0);
+
+    session = applyLocalAction(session, { type: 'mark-correct' });
+    session = applyLocalAction(session, { type: 'mark-correct' });
+    session = applyLocalAction(session, { type: 'return-skipped-clue' });
+    session = applyLocalAction(session, { type: 'mark-correct' });
+
+    expect(session.activeTurn.skippedCluePoolIndex).toBeNull();
+    expect(session.activeTurn.skipsRemaining).toBe(1);
+
+    session = applyLocalAction(session, { type: 'skip-clue' });
+    expect(session.activeTurn.skippedCluePoolIndex).not.toBeNull();
   });
 
   it('requires at least three players for local Imposter', () => {
