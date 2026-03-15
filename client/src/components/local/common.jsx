@@ -1,6 +1,6 @@
-import {
-  MAX_LOCAL_HATGAME_CLUE_LENGTH
-} from '../../local/session';
+import { useEffect, useState } from 'react';
+import { CheckIcon, PencilIcon } from '../Icons';
+import { MAX_LOCAL_HATGAME_CLUE_LENGTH } from '../../local/session';
 import { buildEmptyHatGameClues, LOCAL_PLAYER_LIMIT } from './helpers';
 
 export function HandoffPanel({
@@ -31,14 +31,18 @@ export function HandoffPanel({
       {!isRevealed ? (
         <div className="notice-card local-handoff">
           <strong>{targetName ? `Pass phone to ${targetName}.` : 'Pass the phone.'}</strong>
-          <p>{targetName ? `${targetName} taps ready when everyone else is looking away.` : 'Reveal only when the correct player has the phone.'}</p>
+          <p>
+            {targetName
+              ? `${targetName} taps ready when everyone else is looking away.`
+              : 'Reveal only when the correct player has the phone.'}
+          </p>
         </div>
       ) : (
         children
       )}
 
       <div className="actions actions--stretch">
-        {(!isRevealed || showHideButton) ? (
+        {!isRevealed || showHideButton ? (
           <button onClick={isRevealed ? onHide : onReveal}>
             {isRevealed ? hideLabel : nextRevealLabel}
           </button>
@@ -60,8 +64,21 @@ export function LocalPlayersEditor({
   minimumPlayers = 2,
   showHeading = true,
   showAddButton = true,
-  showRemoveButton = true
+  showRemoveButton = true,
+  compactNames = false
 }) {
+  const [editingPlayerId, setEditingPlayerId] = useState(null);
+
+  useEffect(() => {
+    if (!editingPlayerId) {
+      return;
+    }
+
+    if (!players.some((player) => player.id === editingPlayerId)) {
+      setEditingPlayerId(null);
+    }
+  }, [editingPlayerId, players]);
+
   return (
     <section className="panel panel--stacked">
       {showHeading ? (
@@ -92,17 +109,58 @@ export function LocalPlayersEditor({
 
       <div className="local-player-grid">
         {players.map((player, index) => (
-          <article key={player.id} className="local-player-card">
-            <label className="settings-field">
-              <span className="helper-text">Player {index + 1}</span>
-              <input
-                value={player.name}
-                maxLength={24}
-                onChange={(event) => onRenamePlayer(player.id, event.target.value)}
-              />
-            </label>
+          <article
+            key={player.id}
+            className={
+              compactNames
+                ? 'local-player-card local-player-card--compact-name'
+                : 'local-player-card'
+            }
+          >
+            {compactNames ? (
+              <div className="local-player-inline">
+                {editingPlayerId === player.id ? (
+                  <input
+                    autoFocus
+                    value={player.name}
+                    maxLength={24}
+                    onChange={(event) => onRenamePlayer(player.id, event.target.value)}
+                  />
+                ) : (
+                  <strong className="local-player-inline__name">
+                    {player.name || `Player ${index + 1}`}
+                  </strong>
+                )}
 
-            {teams.length > 0 && (
+                <button
+                  type="button"
+                  className="secondary-action secondary-action--icon"
+                  aria-label={
+                    editingPlayerId === player.id
+                      ? `Finish editing ${player.name || `Player ${index + 1}`}`
+                      : `Edit ${player.name || `Player ${index + 1}`}`
+                  }
+                  onClick={() =>
+                    setEditingPlayerId((currentId) =>
+                      currentId === player.id ? null : player.id
+                    )
+                  }
+                >
+                  {editingPlayerId === player.id ? <CheckIcon /> : <PencilIcon />}
+                </button>
+              </div>
+            ) : (
+              <label className="settings-field">
+                <span className="helper-text">Player {index + 1}</span>
+                <input
+                  value={player.name}
+                  maxLength={24}
+                  onChange={(event) => onRenamePlayer(player.id, event.target.value)}
+                />
+              </label>
+            )}
+
+            {teams.length > 0 ? (
               <label className="settings-field">
                 <span className="helper-text">Team</span>
                 <select
@@ -116,7 +174,7 @@ export function LocalPlayersEditor({
                   ))}
                 </select>
               </label>
-            )}
+            ) : null}
 
             {showRemoveButton ? (
               <button
@@ -224,231 +282,222 @@ export function ResultsActions({ onPlayAgain, onResetSetup, busyAction }) {
   );
 }
 
-export function WhoWhatWhereSettingsCard({ settings, onChange, showHeading = true }) {
+function renderSettingsSection(title, content, showHeading) {
+  if (!showHeading) {
+    return content;
+  }
+
   return (
     <section className="settings-card">
-      {showHeading ? (
-        <div className="panel-heading">
-          <h3>Match settings</h3>
-        </div>
-      ) : null}
-
-      <div className="settings-grid">
-        <label className="settings-field">
-          <span className="helper-text">Teams</span>
-          <select
-            value={settings.teamCount}
-            onChange={(event) =>
-              onChange('teamCount', Number.parseInt(event.target.value, 10))
-            }
-          >
-            <option value={2}>2 teams</option>
-            <option value={3}>3 teams</option>
-            <option value={4}>4 teams</option>
-          </select>
-        </label>
-
-        <label className="settings-field">
-          <span className="helper-text">Turn length</span>
-          <select
-            value={settings.turnDurationSeconds}
-            onChange={(event) =>
-              onChange('turnDurationSeconds', Number.parseInt(event.target.value, 10))
-            }
-          >
-            <option value={30}>30 seconds</option>
-            <option value={45}>45 seconds</option>
-            <option value={60}>60 seconds</option>
-            <option value={75}>75 seconds</option>
-          </select>
-        </label>
-
-        <label className="settings-field">
-          <span className="helper-text">Rounds</span>
-          <select
-            value={settings.totalRounds}
-            onChange={(event) =>
-              onChange('totalRounds', Number.parseInt(event.target.value, 10))
-            }
-          >
-            <option value={1}>1 round</option>
-            <option value={2}>2 rounds</option>
-            <option value={3}>3 rounds</option>
-            <option value={4}>4 rounds</option>
-          </select>
-        </label>
-
-        <label className="settings-field">
-          <span className="helper-text">Skips waiting</span>
-          <select
-            value={String(settings.skipLimit)}
-            onChange={(event) =>
-              onChange(
-                'skipLimit',
-                event.target.value === 'unlimited'
-                  ? 'unlimited'
-                  : Number.parseInt(event.target.value, 10)
-              )
-            }
-          >
-            <option value={1}>1 word</option>
-            <option value={2}>2 words</option>
-            <option value={3}>3 words</option>
-            <option value="unlimited">Unlimited</option>
-          </select>
-        </label>
+      <div className="panel-heading">
+        <h3>{title}</h3>
       </div>
+      {content}
     </section>
   );
+}
+
+export function WhoWhatWhereSettingsCard({ settings, onChange, showHeading = true }) {
+  const content = (
+    <div className="settings-grid">
+      <label className="settings-field">
+        <span className="helper-text">Teams</span>
+        <select
+          value={settings.teamCount}
+          onChange={(event) =>
+            onChange('teamCount', Number.parseInt(event.target.value, 10))
+          }
+        >
+          <option value={2}>2 teams</option>
+          <option value={3}>3 teams</option>
+          <option value={4}>4 teams</option>
+        </select>
+      </label>
+
+      <label className="settings-field">
+        <span className="helper-text">Turn length</span>
+        <select
+          value={settings.turnDurationSeconds}
+          onChange={(event) =>
+            onChange('turnDurationSeconds', Number.parseInt(event.target.value, 10))
+          }
+        >
+          <option value={30}>30 seconds</option>
+          <option value={45}>45 seconds</option>
+          <option value={60}>60 seconds</option>
+          <option value={75}>75 seconds</option>
+        </select>
+      </label>
+
+      <label className="settings-field">
+        <span className="helper-text">Rounds</span>
+        <select
+          value={settings.totalRounds}
+          onChange={(event) =>
+            onChange('totalRounds', Number.parseInt(event.target.value, 10))
+          }
+        >
+          <option value={1}>1 round</option>
+          <option value={2}>2 rounds</option>
+          <option value={3}>3 rounds</option>
+          <option value={4}>4 rounds</option>
+        </select>
+      </label>
+
+      <label className="settings-field">
+        <span className="helper-text">Skips waiting</span>
+        <select
+          value={String(settings.skipLimit)}
+          onChange={(event) =>
+            onChange(
+              'skipLimit',
+              event.target.value === 'unlimited'
+                ? 'unlimited'
+                : Number.parseInt(event.target.value, 10)
+            )
+          }
+        >
+          <option value={1}>1 word</option>
+          <option value={2}>2 words</option>
+          <option value={3}>3 words</option>
+          <option value="unlimited">Unlimited</option>
+        </select>
+      </label>
+    </div>
+  );
+
+  return renderSettingsSection('Match settings', content, showHeading);
 }
 
 export function ImposterSettingsCard({ settings, onChange, showHeading = true }) {
-  return (
-    <section className="settings-card">
-      {showHeading ? (
-        <div className="panel-heading">
-          <h3>Round settings</h3>
-        </div>
-      ) : null}
+  const content = (
+    <div className="settings-grid">
+      <label className="settings-field">
+        {showHeading ? <span className="helper-text">Rounds</span> : null}
+        <select
+          value={settings.rounds}
+          onChange={(event) =>
+            onChange('rounds', Number.parseInt(event.target.value, 10))
+          }
+        >
+          <option value={1}>1 round</option>
+          <option value={2}>2 rounds</option>
+          <option value={3}>3 rounds</option>
+          <option value={4}>4 rounds</option>
+        </select>
+      </label>
 
-      <div className="settings-grid">
-        <label className="settings-field">
-          <span className="helper-text">Rounds</span>
-          <select
-            value={settings.rounds}
-            onChange={(event) =>
-              onChange('rounds', Number.parseInt(event.target.value, 10))
-            }
-          >
-            <option value={1}>1 round</option>
-            <option value={2}>2 rounds</option>
-            <option value={3}>3 rounds</option>
-            <option value={4}>4 rounds</option>
-          </select>
-        </label>
-
-        <label className="settings-field">
-          <span className="helper-text">Imposters</span>
-          <select
-            value={settings.imposterCount}
-            onChange={(event) =>
-              onChange('imposterCount', Number.parseInt(event.target.value, 10))
-            }
-          >
-            <option value={1}>1 imposter</option>
-            <option value={2}>2 imposters</option>
-            <option value={3}>3 imposters</option>
-          </select>
-        </label>
-      </div>
-    </section>
+      <label className="settings-field">
+        {showHeading ? <span className="helper-text">Imposters</span> : null}
+        <select
+          value={settings.imposterCount}
+          onChange={(event) =>
+            onChange('imposterCount', Number.parseInt(event.target.value, 10))
+          }
+        >
+          <option value={1}>1 imposter</option>
+          <option value={2}>2 imposters</option>
+          <option value={3}>3 imposters</option>
+        </select>
+      </label>
+    </div>
   );
+
+  return renderSettingsSection('Round settings', content, showHeading);
 }
 
 export function DrawNGuessSettingsCard({ settings, onChange, showHeading = true }) {
-  return (
-    <section className="settings-card">
-      {showHeading ? (
-        <div className="panel-heading">
-          <h3>Round settings</h3>
-        </div>
-      ) : null}
-
-      <div className="settings-grid">
-        <label className="settings-field">
-          <span className="helper-text">Round length</span>
-          <select
-            value={settings.roundDurationSeconds}
-            onChange={(event) =>
-              onChange('roundDurationSeconds', Number.parseInt(event.target.value, 10))
-            }
-          >
-            <option value={30}>30 seconds</option>
-            <option value={45}>45 seconds</option>
-            <option value={60}>60 seconds</option>
-          </select>
-        </label>
-      </div>
-    </section>
+  const content = (
+    <div className="settings-grid">
+      <label className="settings-field">
+        <span className="helper-text">Round length</span>
+        <select
+          value={settings.roundDurationSeconds}
+          onChange={(event) =>
+            onChange('roundDurationSeconds', Number.parseInt(event.target.value, 10))
+          }
+        >
+          <option value={30}>30 seconds</option>
+          <option value={45}>45 seconds</option>
+          <option value={60}>60 seconds</option>
+        </select>
+      </label>
+    </div>
   );
+
+  return renderSettingsSection('Round settings', content, showHeading);
 }
 
 export function HatGameSettingsCard({ settings, onChange, showHeading = true }) {
-  return (
-    <section className="settings-card">
-      {showHeading ? (
-        <div className="panel-heading">
-          <h3>Round settings</h3>
-        </div>
-      ) : null}
+  const content = (
+    <div className="settings-grid">
+      <label className="settings-field">
+        <span className="helper-text">Teams</span>
+        <select
+          value={settings.teamCount}
+          onChange={(event) =>
+            onChange('teamCount', Number.parseInt(event.target.value, 10))
+          }
+        >
+          <option value={2}>2 teams</option>
+          <option value={3}>3 teams</option>
+          <option value={4}>4 teams</option>
+        </select>
+      </label>
 
-      <div className="settings-grid">
-        <label className="settings-field">
-          <span className="helper-text">Teams</span>
-          <select
-            value={settings.teamCount}
-            onChange={(event) =>
-              onChange('teamCount', Number.parseInt(event.target.value, 10))
-            }
-          >
-            <option value={2}>2 teams</option>
-            <option value={3}>3 teams</option>
-            <option value={4}>4 teams</option>
-          </select>
-        </label>
+      <label className="settings-field">
+        <span className="helper-text">Turn length</span>
+        <select
+          value={settings.turnDurationSeconds}
+          onChange={(event) =>
+            onChange('turnDurationSeconds', Number.parseInt(event.target.value, 10))
+          }
+        >
+          <option value={30}>30 seconds</option>
+          <option value={45}>45 seconds</option>
+          <option value={60}>60 seconds</option>
+          <option value={90}>90 seconds</option>
+          <option value={120}>120 seconds</option>
+        </select>
+      </label>
 
-        <label className="settings-field">
-          <span className="helper-text">Turn length</span>
-          <select
-            value={settings.turnDurationSeconds}
-            onChange={(event) =>
-              onChange('turnDurationSeconds', Number.parseInt(event.target.value, 10))
-            }
-          >
-            <option value={30}>30 seconds</option>
-            <option value={45}>45 seconds</option>
-            <option value={60}>60 seconds</option>
-            <option value={90}>90 seconds</option>
-            <option value={120}>120 seconds</option>
-          </select>
-        </label>
+      <label className="settings-field">
+        <span className="helper-text">Clues each</span>
+        <select
+          value={settings.cluesPerPlayer}
+          onChange={(event) =>
+            onChange('cluesPerPlayer', Number.parseInt(event.target.value, 10))
+          }
+        >
+          <option value={3}>3 clues</option>
+          <option value={4}>4 clues</option>
+          <option value={5}>5 clues</option>
+          <option value={6}>6 clues</option>
+          <option value={7}>7 clues</option>
+          <option value={8}>8 clues</option>
+          <option value={9}>9 clues</option>
+          <option value={10}>10 clues</option>
+        </select>
+      </label>
 
-        <label className="settings-field">
-          <span className="helper-text">Clues each</span>
-          <select
-            value={settings.cluesPerPlayer}
-            onChange={(event) =>
-              onChange('cluesPerPlayer', Number.parseInt(event.target.value, 10))
-            }
-          >
-            <option value={3}>3 clues</option>
-            <option value={4}>4 clues</option>
-            <option value={5}>5 clues</option>
-            <option value={6}>6 clues</option>
-            <option value={7}>7 clues</option>
-            <option value={8}>8 clues</option>
-            <option value={9}>9 clues</option>
-            <option value={10}>10 clues</option>
-          </select>
-        </label>
-
-        <label className="settings-field">
-          <span className="helper-text">Skips per turn</span>
-          <select
-            value={settings.skipsPerTurn}
-            onChange={(event) =>
-              onChange('skipsPerTurn', Number.parseInt(event.target.value, 10))
-            }
-          >
-            <option value={0}>0 skips</option>
-            <option value={1}>1 skip</option>
-            <option value={2}>2 skips</option>
-            <option value={3}>3 skips</option>
-            <option value={4}>4 skips</option>
-            <option value={5}>5 skips</option>
-          </select>
-        </label>
-      </div>
-    </section>
+      <label className="settings-field">
+        <span className="helper-text">Skips per turn</span>
+        <select
+          value={settings.skipsPerTurn}
+          onChange={(event) =>
+            onChange('skipsPerTurn', Number.parseInt(event.target.value, 10))
+          }
+        >
+          <option value={0}>0 skips</option>
+          <option value={1}>1 skip</option>
+          <option value={2}>2 skips</option>
+          <option value={3}>3 skips</option>
+          <option value={4}>4 skips</option>
+          <option value={5}>5 skips</option>
+        </select>
+      </label>
+    </div>
   );
+
+  return renderSettingsSection('Round settings', content, showHeading);
 }

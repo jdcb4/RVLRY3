@@ -503,6 +503,26 @@ summary:focus-visible {
   background: rgba(255, 255, 255, 0.03);
 }
 
+.local-player-card--compact-name {
+  gap: 0.75rem;
+}
+
+.local-player-inline {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.local-player-inline__name {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-weight: 700;
+}
+
+.local-player-inline input {
+  flex: 1 1 auto;
+}
+
 .team-card--active {
   border-color: rgba(126, 216, 177, 0.26);
   background: rgba(126, 216, 177, 0.08);

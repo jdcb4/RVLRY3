@@ -475,7 +475,7 @@ export function LocalMode() {
 
             <div className="settings-grid">
               <label className="settings-field">
-                <span className="helper-text">Players</span>
+                {gameId === 'imposter' ? null : <span className="helper-text">Players</span>}
                 <select
                   value={players.length}
                   onChange={(event) => handleSetPlayerCount(event.target.value)}
@@ -509,10 +509,7 @@ export function LocalMode() {
             <summary className="disclosure__summary">
               <div className="disclosure__summary-copy">
                 <h2>Players</h2>
-                <p>
-                  {players.length} player{players.length === 1 ? '' : 's'}
-                  {gameModule.requiresTeams ? `, ${settings.teamCount} teams` : ''}
-                </p>
+                {gameModule.requiresTeams ? <p>{settings.teamCount} teams</p> : null}
               </div>
             </summary>
             <div className="disclosure__body">
@@ -532,6 +529,7 @@ export function LocalMode() {
                 showHeading={false}
                 showAddButton={false}
                 showRemoveButton={false}
+                compactNames={!gameModule.requiresTeams}
               />
             </div>
           </details>
@@ -574,12 +572,7 @@ export function LocalMode() {
                   ? 'Start private clue entry'
                   : 'Start local round'}
             </button>
-            <p className="helper-text">
-              {startHint ??
-                (gameModule.requiresHatClues
-                  ? 'Clues will be collected privately after this.'
-                  : 'Ready once the names look right.')}
-            </p>
+            {startHint ? <p className="helper-text">{startHint}</p> : null}
           </div>
         </div>
       ) : !session && hatClueEntry ? (
