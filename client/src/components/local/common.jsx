@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { CheckIcon, PencilIcon } from '../Icons';
+import { ArrowRightIcon, CheckIcon, PencilIcon } from '../Icons';
 import { MAX_LOCAL_HATGAME_CLUE_LENGTH } from '../../local/session';
 import { buildEmptyHatGameClues, LOCAL_PLAYER_LIMIT } from './helpers';
 
@@ -187,6 +187,138 @@ export function LocalPlayersEditor({
             ) : null}
           </article>
         ))}
+      </div>
+    </section>
+  );
+}
+
+export function LocalTeamRosterEditor({
+  teams,
+  players,
+  onRenameTeam,
+  onRenamePlayer,
+  onMovePlayer,
+  onAutoBalance,
+  onToast,
+  showHeading = true
+}) {
+  const [editingTeamId, setEditingTeamId] = useState(null);
+  const [editingPlayerId, setEditingPlayerId] = useState(null);
+
+  useEffect(() => {
+    if (editingTeamId && !teams.some((team) => team.id === editingTeamId)) {
+      setEditingTeamId(null);
+    }
+  }, [editingTeamId, teams]);
+
+  useEffect(() => {
+    if (editingPlayerId && !players.some((player) => player.id === editingPlayerId)) {
+      setEditingPlayerId(null);
+    }
+  }, [editingPlayerId, players]);
+
+  return (
+    <section className="panel panel--stacked">
+      {showHeading ? (
+        <div className="panel-heading">
+          <h2>Teams</h2>
+        </div>
+      ) : null}
+
+      <div className="local-toolbar">
+        <button
+          className="secondary-action secondary-action--compact"
+          onClick={() => {
+            onAutoBalance();
+            onToast?.('Teams auto-balanced');
+          }}
+        >
+          Auto-balance teams
+        </button>
+      </div>
+
+      <div className="team-grid">
+        {teams.map((team) => {
+          const roster = players.filter((player) => player.teamId === team.id);
+          return (
+            <article key={team.id} className="team-card">
+              <div className="team-card__title-row">
+                {editingTeamId === team.id ? (
+                  <input
+                    autoFocus
+                    value={team.name}
+                    maxLength={24}
+                    onChange={(event) => onRenameTeam(team.id, event.target.value)}
+                  />
+                ) : (
+                  <h3>{team.name}</h3>
+                )}
+
+                <button
+                  type="button"
+                  className="icon-button icon-button--subtle"
+                  aria-label={
+                    editingTeamId === team.id ? `Finish editing ${team.name}` : `Edit ${team.name}`
+                  }
+                  onClick={() =>
+                    setEditingTeamId((currentId) => (currentId === team.id ? null : team.id))
+                  }
+                >
+                  {editingTeamId === team.id ? <CheckIcon /> : <PencilIcon />}
+                </button>
+              </div>
+
+              {roster.length > 0 ? (
+                <ul className="player-list">
+                  {roster.map((player, index) => (
+                    <li key={player.id} className="player-row player-row--compact">
+                      <div className="player-row__identity">
+                        {editingPlayerId === player.id ? (
+                          <input
+                            autoFocus
+                            value={player.name}
+                            maxLength={24}
+                            onChange={(event) => onRenamePlayer(player.id, event.target.value)}
+                          />
+                        ) : (
+                          <span className="player-row__name">{player.name || `Player ${index + 1}`}</span>
+                        )}
+                      </div>
+                      <div className="team-card__player-actions">
+                        <button
+                          type="button"
+                          className="icon-button icon-button--subtle"
+                          aria-label={
+                            editingPlayerId === player.id
+                              ? `Finish editing ${player.name}`
+                              : `Edit ${player.name}`
+                          }
+                          onClick={() =>
+                            setEditingPlayerId((currentId) =>
+                              currentId === player.id ? null : player.id
+                            )
+                          }
+                        >
+                          {editingPlayerId === player.id ? <CheckIcon /> : <PencilIcon />}
+                        </button>
+                        <button
+                          type="button"
+                          className="icon-button icon-button--subtle"
+                          aria-label={`Move ${player.name} to the next team`}
+                          onClick={() => onMovePlayer(player.id)}
+                        >
+                          <ArrowRightIcon />
+                        </button>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="team-card__empty">No players yet</p>
+              )}
+            </article>
+          );
+        })}
       </div>
     </section>
   );

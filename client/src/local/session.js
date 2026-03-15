@@ -81,8 +81,14 @@ const normalizeLocalPlayer = (player, index) => ({
   teamId: player.teamId ?? null
 });
 
-export const buildLocalTeams = (teamCount = DEFAULT_LOCAL_WHOWHATWHERE_SETTINGS.teamCount) =>
-  buildTeams(teamCount);
+export const buildLocalTeams = (
+  teamCount = DEFAULT_LOCAL_WHOWHATWHERE_SETTINGS.teamCount,
+  teamNames = []
+) =>
+  buildTeams(teamCount).map((team, index) => ({
+    ...team,
+    name: teamNames[index]?.trim() || team.name
+  }));
 
 export function rebalanceWhoWhatWherePlayers(players, teamCount) {
   const teamIds = buildLocalTeams(teamCount).map((team) => team.id);
@@ -255,7 +261,11 @@ function buildImposterSession({
   };
 }
 
-function buildWhoWhatWhereSession({ players, settings = DEFAULT_LOCAL_WHOWHATWHERE_SETTINGS }) {
+function buildWhoWhatWhereSession({
+  players,
+  settings = DEFAULT_LOCAL_WHOWHATWHERE_SETTINGS,
+  lobbyState = {}
+}) {
   const normalizedSettings = sanitizeWhoWhatWhereSettings(settings);
   const orderedPlayers = rebalanceWhoWhatWherePlayers(players, normalizedSettings.teamCount);
 
@@ -265,7 +275,7 @@ function buildWhoWhatWhereSession({ players, settings = DEFAULT_LOCAL_WHOWHATWHE
     wordReserves: {},
     ...createWhoWhatWhereGame({
       players: orderedPlayers,
-      teams: buildLocalTeams(normalizedSettings.teamCount),
+      teams: buildLocalTeams(normalizedSettings.teamCount, lobbyState.teamNames),
       settings: normalizedSettings
     })
   };
@@ -285,7 +295,7 @@ function buildHatGameSession({
     players: orderedPlayers,
     rng,
     ...createHatGame({
-      teams: buildLocalTeams(normalizedSettings.teamCount),
+      teams: buildLocalTeams(normalizedSettings.teamCount, lobbyState.teamNames),
       settings: normalizedSettings,
       cluePool: buildHatGameCluePool(orderedPlayers, lobbyState.clueSubmissions ?? {})
     })
@@ -325,7 +335,7 @@ export function buildLocalSession({
   }
 
   if (gameId === 'whowhatwhere') {
-    return buildWhoWhatWhereSession({ players, settings });
+    return buildWhoWhatWhereSession({ players, settings, lobbyState });
   }
 
   if (gameId === 'drawnguess') {

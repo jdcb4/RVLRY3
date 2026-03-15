@@ -12,6 +12,20 @@ export function ArrowLeftIcon() {
   );
 }
 
+export function ArrowRightIcon() {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 20 20" fill="none">
+      <path
+        d="M8.25 4.75 13.5 10l-5.25 5.25M13 10H6.5"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth="1.8"
+      />
+    </svg>
+  );
+}
+
 export function ShareIcon() {
   return (
     <svg aria-hidden="true" viewBox="0 0 20 20" fill="none">
