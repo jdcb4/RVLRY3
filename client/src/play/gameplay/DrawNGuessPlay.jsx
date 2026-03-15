@@ -1,87 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useStageCue } from '../../audio/useGameAudio';
 import { DrawingPad, SummaryChips } from '../../components/gameplay/SharedGameUi';
+import { exportDrawNGuessChainImage } from '../../games/drawNGuessExport';
 import { DisclosurePanel, GameplayPlayerList, ResultsActions } from './common';
-
-const exportBookAsImage = async ({ book, playersById }) => {
-  const canvas = document.createElement('canvas');
-  const context = canvas.getContext('2d');
-  if (!context) {
-    return;
-  }
-
-  const width = 1080;
-  const padding = 48;
-  const blockGap = 28;
-  const titleHeight = 140;
-  const rowHeights = book.entries.map((entry) => (entry.type === 'drawing' ? 420 : 140));
-  const height =
-    titleHeight + padding * 2 + rowHeights.reduce((total, value) => total + value, 0) + blockGap * (rowHeights.length - 1);
-  canvas.width = width;
-  canvas.height = height;
-
-  context.fillStyle = '#f4efe5';
-  context.fillRect(0, 0, width, height);
-
-  context.fillStyle = '#13211d';
-  context.font = '700 46px Georgia, serif';
-  context.fillText(
-    `DrawNGuess: ${playersById.get(book.originPlayerId)?.name ?? 'Book'}`,
-    padding,
-    90
-  );
-  context.font = '500 28px Arial, sans-serif';
-  context.fillText('RVLRY reveal chain', padding, 128);
-
-  let y = titleHeight;
-  for (const [index, entry] of book.entries.entries()) {
-    const blockHeight = rowHeights[index];
-    context.fillStyle = '#ffffff';
-    context.strokeStyle = '#d6cdbf';
-    context.lineWidth = 3;
-    context.beginPath();
-    context.roundRect(padding, y, width - padding * 2, blockHeight, 28);
-    context.fill();
-    context.stroke();
-
-    context.fillStyle = '#5b6059';
-    context.font = '600 24px Arial, sans-serif';
-    const label =
-      entry.type === 'prompt' ? 'Prompt' : entry.type === 'drawing' ? 'Drawing' : 'Guess';
-    context.fillText(label, padding + 26, y + 42);
-    context.fillStyle = '#13211d';
-    context.font = '600 26px Arial, sans-serif';
-    if (entry.submittedBy) {
-      context.fillText(
-        playersById.get(entry.submittedBy)?.name ?? 'Player',
-        padding + 150,
-        y + 42
-      );
-    }
-
-    if (entry.type === 'drawing') {
-      const image = await new Promise((resolve, reject) => {
-        const nextImage = new Image();
-        nextImage.onload = () => resolve(nextImage);
-        nextImage.onerror = reject;
-        nextImage.src = entry.imageData;
-      });
-      context.drawImage(image, padding + 26, y + 64, width - padding * 2 - 52, blockHeight - 90);
-    } else {
-      context.fillStyle = '#13211d';
-      context.font = '500 36px Arial, sans-serif';
-      context.fillText(entry.text ?? '', padding + 26, y + 92, width - padding * 2 - 52);
-    }
-
-    y += blockHeight + blockGap;
-  }
-
-  const url = canvas.toDataURL('image/png');
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = `drawnguess-${playersById.get(book.originPlayerId)?.name ?? 'book'}.png`;
-  link.click();
-};
 
 export function DrawNGuessPlay({
   roomCode,
@@ -250,7 +171,17 @@ export function DrawNGuessPlay({
           <button
             className="secondary-action"
             disabled={!selectedBook}
-            onClick={() => exportBookAsImage({ book: selectedBook, playersById })}
+            onClick={() =>
+              exportDrawNGuessChainImage({
+                entries: selectedBook.entries,
+                playersById: new Map(
+                  [...playersById.entries()].map(([id, player]) => [id, player?.name ?? 'Player'])
+                ),
+                title: `DrawNGuess: ${playersById.get(selectedBook.originPlayerId)?.name ?? 'Book'}`,
+                subtitle: 'RVLRY reveal chain',
+                filename: `drawnguess-${playersById.get(selectedBook.originPlayerId)?.name ?? 'book'}.png`
+              })
+            }
           >
             Export current book
           </button>

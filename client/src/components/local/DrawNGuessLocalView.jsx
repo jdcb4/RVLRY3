@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useStageCue } from '../../audio/useGameAudio';
+import { exportDrawNGuessChainImage } from '../../games/drawNGuessExport';
 import { MAX_LOCAL_GUESS_LENGTH } from '../../local/session';
-import { DrawingPad, SummaryChips } from '../gameplay/SharedGameUi';
+import { DrawingPad } from '../gameplay/SharedGameUi';
 import { HandoffPanel, ResultsActions } from './common';
 
 export function DrawNGuessLocalView({
@@ -16,6 +17,12 @@ export function DrawNGuessLocalView({
   const activePlayer =
     session.players.find((player) => player.id === session.activePlayerId) ?? null;
   const previousEntry = session.chain.at(-1);
+  const [shareError, setShareError] = useState('');
+  const [isExporting, setIsExporting] = useState(false);
+  const playersById = useMemo(
+    () => new Map(session.players.map((player) => [player.id, player.name])),
+    [session.players]
+  );
 
   useStageCue(session.stage, {
     draw: 'handoff',
@@ -26,7 +33,30 @@ export function DrawNGuessLocalView({
   useEffect(() => {
     setIsRevealed(false);
     setGuessText('');
+    setShareError('');
+    setIsExporting(false);
   }, [session.stage, session.activePlayerId, session.stageIndex]);
+
+  const handleExportChain = async () => {
+    setShareError('');
+    setIsExporting(true);
+
+    try {
+      await exportDrawNGuessChainImage({
+        entries: session.results?.chain ?? [],
+        playersById,
+        title: `DrawNGuess: ${session.players[0]?.name ?? 'Local game'}`,
+        subtitle: 'RVLRY reveal chain',
+        filename: 'drawnguess-reveal-chain.png'
+      });
+    } catch (error) {
+      setShareError(
+        error instanceof Error ? error.message : 'Could not export the reveal chain'
+      );
+    } finally {
+      setIsExporting(false);
+    }
+  };
 
   if (session.stage !== 'results' && activePlayer) {
     const isDrawStage = session.stage === 'draw';
@@ -90,31 +120,21 @@ export function DrawNGuessLocalView({
     <div className="gameplay-stack">
       <section className="panel panel--hero panel--stacked gameplay-primary">
         <div className="panel-heading">
-          <p className="status-pill">Chain complete</p>
+          <p className="status-pill">Reveal chain</p>
           <h2>Reveal the whole drift</h2>
-          <p>The original prompt and every drawing or guess are now visible for the full table.</p>
         </div>
 
-        <SummaryChips
-          items={[
-            { label: 'Players', value: session.players.length },
-            { label: 'Entries', value: session.results?.chain?.length ?? 0 },
-            { label: 'Submissions', value: session.submissions },
-            { label: 'Round length', value: `${session.settings?.roundDurationSeconds ?? 45}s` }
-          ]}
-        />
-
-        <ResultsActions
-          busyAction={busyAction}
-          onPlayAgain={onPlayAgain}
-          onResetSetup={onResetSetup}
-        />
-      </section>
-
-      <section className="panel panel--stacked">
-        <div className="panel-heading">
-          <h2>Reveal chain</h2>
+        <div className="actions actions--stretch">
+          <button
+            className="secondary-action"
+            disabled={isExporting}
+            onClick={handleExportChain}
+          >
+            {isExporting ? 'Exporting image' : 'Share or export image'}
+          </button>
         </div>
+
+        {shareError ? <p className="connection-banner connection-banner--error">{shareError}</p> : null}
 
         <div className="results-chain">
           {(session.results?.chain ?? []).map((entry, index) => (
@@ -135,16 +155,22 @@ export function DrawNGuessLocalView({
               ) : (
                 <p className="stage-summary">{entry.text}</p>
               )}
-              {entry.submittedBy && (
+              {entry.submittedBy ? (
                 <p className="helper-text">
-                  Submitted by{' '}
-                  {session.players.find((player) => player.id === entry.submittedBy)?.name ??
-                    'Player'}
+                  Submitted by {playersById.get(entry.submittedBy) ?? 'Player'}
                 </p>
-              )}
+              ) : null}
             </article>
           ))}
         </div>
+      </section>
+
+      <section className="panel panel--stacked">
+        <ResultsActions
+          busyAction={busyAction}
+          onPlayAgain={onPlayAgain}
+          onResetSetup={onResetSetup}
+        />
       </section>
     </div>
   );
