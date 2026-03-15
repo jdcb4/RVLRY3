@@ -352,7 +352,7 @@ export function LocalMode() {
     );
   };
 
-  const handleMovePlayerToNextTeam = (playerId) => {
+  const handleMovePlayerToNextTeam = (playerId, targetTeamId) => {
     if (!teams.length) {
       return;
     }
@@ -362,10 +362,16 @@ export function LocalMode() {
       return;
     }
 
-    const currentIndex = teams.findIndex((team) => team.id === activePlayer.teamId);
-    const nextTeam = teams[(currentIndex + 1 + teams.length) % teams.length] ?? teams[0];
-    handleChangeTeam(playerId, nextTeam.id);
-    setToastMessage(`${activePlayer.name} moved to ${nextTeam.name}`);
+    const targetTeam =
+      teams.find((team) => team.id === targetTeamId) ??
+      teams.find((team) => team.id !== activePlayer.teamId) ??
+      teams[0];
+    if (!targetTeam || targetTeam.id === activePlayer.teamId) {
+      return;
+    }
+
+    handleChangeTeam(playerId, targetTeam.id);
+    setToastMessage(`${activePlayer.name} moved to ${targetTeam.name}`);
   };
 
   const handleChangeHatGameClue = (playerId, clueIndex, value) => {
@@ -516,7 +522,9 @@ export function LocalMode() {
 
                 <div className="settings-grid">
                   <label className="settings-field">
-                    {gameId === 'imposter' ? null : <span className="helper-text">Players</span>}
+                    {!gameModule.requiresTeams && gameId !== 'imposter' ? (
+                      <span className="helper-text">Players</span>
+                    ) : null}
                     <select
                       value={players.length}
                       onChange={(event) => handleSetPlayerCount(event.target.value)}

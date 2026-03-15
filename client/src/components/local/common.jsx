@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { ArrowRightIcon, CheckIcon, PencilIcon } from '../Icons';
+import { ArrowRightIcon, CheckIcon, PencilIcon, ShuffleIcon } from '../Icons';
 import { MAX_LOCAL_HATGAME_CLUE_LENGTH } from '../../local/session';
 import { buildEmptyHatGameClues, LOCAL_PLAYER_LIMIT } from './helpers';
 
@@ -204,6 +204,7 @@ export function LocalTeamRosterEditor({
 }) {
   const [editingTeamId, setEditingTeamId] = useState(null);
   const [editingPlayerId, setEditingPlayerId] = useState(null);
+  const [movingPlayerId, setMovingPlayerId] = useState(null);
 
   useEffect(() => {
     if (editingTeamId && !teams.some((team) => team.id === editingTeamId)) {
@@ -217,23 +218,29 @@ export function LocalTeamRosterEditor({
     }
   }, [editingPlayerId, players]);
 
+  useEffect(() => {
+    if (movingPlayerId && !players.some((player) => player.id === movingPlayerId)) {
+      setMovingPlayerId(null);
+    }
+  }, [movingPlayerId, players]);
+
   return (
     <section className="panel panel--stacked">
-      {showHeading ? (
+      <div className="team-setup__heading">
         <div className="panel-heading">
-          <h2>Teams</h2>
+          {showHeading ? <h2>Teams</h2> : null}
+          <p>Set up the teams</p>
         </div>
-      ) : null}
-
-      <div className="local-toolbar">
         <button
-          className="secondary-action secondary-action--compact"
+          type="button"
+          className="icon-button icon-button--subtle"
+          aria-label="Auto-balance teams"
           onClick={() => {
             onAutoBalance();
             onToast?.('Teams auto-balanced');
           }}
         >
-          Auto-balance teams
+          <ShuffleIcon />
         </button>
       </div>
 
@@ -242,36 +249,50 @@ export function LocalTeamRosterEditor({
           const roster = players.filter((player) => player.teamId === team.id);
           return (
             <article key={team.id} className="team-card">
-              <div className="team-card__title-row">
+              <div className="team-card__title-inline">
                 {editingTeamId === team.id ? (
-                  <input
-                    autoFocus
-                    value={team.name}
-                    maxLength={24}
-                    onChange={(event) => onRenameTeam(team.id, event.target.value)}
-                  />
+                  <>
+                    <input
+                      autoFocus
+                      value={team.name}
+                      maxLength={24}
+                      onChange={(event) => onRenameTeam(team.id, event.target.value)}
+                    />
+                    <button
+                      type="button"
+                      className="icon-button icon-button--subtle"
+                      aria-label={`Finish editing ${team.name}`}
+                      onClick={() => setEditingTeamId(null)}
+                    >
+                      <CheckIcon />
+                    </button>
+                  </>
                 ) : (
-                  <h3>{team.name}</h3>
+                  <>
+                    <h3>{team.name}</h3>
+                    <button
+                      type="button"
+                      className="icon-button icon-button--subtle"
+                      aria-label={`Edit ${team.name}`}
+                      onClick={() => setEditingTeamId(team.id)}
+                    >
+                      <PencilIcon />
+                    </button>
+                  </>
                 )}
-
-                <button
-                  type="button"
-                  className="icon-button icon-button--subtle"
-                  aria-label={
-                    editingTeamId === team.id ? `Finish editing ${team.name}` : `Edit ${team.name}`
-                  }
-                  onClick={() =>
-                    setEditingTeamId((currentId) => (currentId === team.id ? null : team.id))
-                  }
-                >
-                  {editingTeamId === team.id ? <CheckIcon /> : <PencilIcon />}
-                </button>
               </div>
 
               {roster.length > 0 ? (
                 <ul className="player-list">
                   {roster.map((player, index) => (
-                    <li key={player.id} className="player-row player-row--compact">
+                    <li
+                      key={player.id}
+                      className={
+                        movingPlayerId === player.id
+                          ? 'player-row player-row--compact player-row--stacked'
+                          : 'player-row player-row--compact'
+                      }
+                    >
                       <div className="player-row__identity">
                         {editingPlayerId === player.id ? (
                           <input
@@ -304,12 +325,35 @@ export function LocalTeamRosterEditor({
                         <button
                           type="button"
                           className="icon-button icon-button--subtle"
-                          aria-label={`Move ${player.name} to the next team`}
-                          onClick={() => onMovePlayer(player.id)}
+                          aria-label={`Choose a team for ${player.name}`}
+                          onClick={() =>
+                            setMovingPlayerId((currentId) =>
+                              currentId === player.id ? null : player.id
+                            )
+                          }
                         >
                           <ArrowRightIcon />
                         </button>
                       </div>
+                      {movingPlayerId === player.id ? (
+                        <div className="team-card__move-picker">
+                          {teams
+                            .filter((targetTeam) => targetTeam.id !== player.teamId)
+                            .map((targetTeam) => (
+                              <button
+                                key={`${player.id}-${targetTeam.id}`}
+                                type="button"
+                                className="secondary-action secondary-action--compact"
+                                onClick={() => {
+                                  onMovePlayer(player.id, targetTeam.id);
+                                  setMovingPlayerId(null);
+                                }}
+                              >
+                                Move to {targetTeam.name}
+                              </button>
+                            ))}
+                        </div>
+                      ) : null}
                     </li>
                   ))}
                 </ul>
@@ -433,7 +477,7 @@ export function WhoWhatWhereSettingsCard({ settings, onChange, showHeading = tru
   const content = (
     <div className="settings-grid">
       <label className="settings-field">
-        <span className="helper-text">Teams</span>
+        {showHeading ? <span className="helper-text">Teams</span> : null}
         <select
           value={settings.teamCount}
           onChange={(event) =>
@@ -447,7 +491,7 @@ export function WhoWhatWhereSettingsCard({ settings, onChange, showHeading = tru
       </label>
 
       <label className="settings-field">
-        <span className="helper-text">Turn length</span>
+        {showHeading ? <span className="helper-text">Turn length</span> : null}
         <select
           value={settings.turnDurationSeconds}
           onChange={(event) =>
@@ -462,7 +506,7 @@ export function WhoWhatWhereSettingsCard({ settings, onChange, showHeading = tru
       </label>
 
       <label className="settings-field">
-        <span className="helper-text">Rounds</span>
+        {showHeading ? <span className="helper-text">Rounds</span> : null}
         <select
           value={settings.totalRounds}
           onChange={(event) =>
@@ -477,7 +521,7 @@ export function WhoWhatWhereSettingsCard({ settings, onChange, showHeading = tru
       </label>
 
       <label className="settings-field">
-        <span className="helper-text">Skips waiting</span>
+        {showHeading ? <span className="helper-text">Skips waiting</span> : null}
         <select
           value={String(settings.skipLimit)}
           onChange={(event) =>
@@ -564,7 +608,7 @@ export function HatGameSettingsCard({ settings, onChange, showHeading = true }) 
   const content = (
     <div className="settings-grid">
       <label className="settings-field">
-        <span className="helper-text">Teams</span>
+        {showHeading ? <span className="helper-text">Teams</span> : null}
         <select
           value={settings.teamCount}
           onChange={(event) =>
@@ -578,7 +622,7 @@ export function HatGameSettingsCard({ settings, onChange, showHeading = true }) 
       </label>
 
       <label className="settings-field">
-        <span className="helper-text">Turn length</span>
+        {showHeading ? <span className="helper-text">Turn length</span> : null}
         <select
           value={settings.turnDurationSeconds}
           onChange={(event) =>
@@ -594,7 +638,7 @@ export function HatGameSettingsCard({ settings, onChange, showHeading = true }) 
       </label>
 
       <label className="settings-field">
-        <span className="helper-text">Clues each</span>
+        {showHeading ? <span className="helper-text">Clues each</span> : null}
         <select
           value={settings.cluesPerPlayer}
           onChange={(event) =>
@@ -613,7 +657,7 @@ export function HatGameSettingsCard({ settings, onChange, showHeading = true }) 
       </label>
 
       <label className="settings-field">
-        <span className="helper-text">Skips per turn</span>
+        {showHeading ? <span className="helper-text">Skips per turn</span> : null}
         <select
           value={settings.skipsPerTurn}
           onChange={(event) =>

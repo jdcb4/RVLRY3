@@ -536,6 +536,20 @@ summary:focus-visible {
   gap: 0.75rem;
 }
 
+.team-card__title-inline {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.team-card__title-inline h3 {
+  margin: 0;
+}
+
+.team-card__title-inline input {
+  flex: 1 1 auto;
+}
+
 .team-card__headline {
   min-width: 0;
   flex: 1 1 auto;
@@ -592,6 +606,14 @@ summary:focus-visible {
 .team-card__player-actions {
   flex: 0 0 auto;
   justify-content: flex-end;
+}
+
+.team-card__move-picker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  width: 100%;
+  padding-top: 0.75rem;
 }
 
 .team-card__notice {
@@ -1099,6 +1121,11 @@ summary:focus-visible {
   padding: 0.8rem 0;
 }
 
+.player-row--stacked {
+  flex-wrap: wrap;
+  align-items: flex-start;
+}
+
 .actions {
   align-items: stretch;
 }
@@ -1119,6 +1146,13 @@ summary:focus-visible {
   min-height: 42px;
   padding: 0.65rem 0.75rem;
   font-size: 0.88rem;
+}
+
+.team-setup__heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
 }
 
 .secondary-action--icon {
@@ -1503,6 +1537,11 @@ summary:focus-visible {
     flex-direction: column;
   }
 
+  .team-card__title-inline {
+    align-items: center;
+    flex-direction: row;
+  }
+
   .team-card__name-row,
   .team-card__edit-row {
     align-items: stretch;
@@ -1515,6 +1554,10 @@ summary:focus-visible {
 
   .local-toolbar {
     flex-direction: column;
+  }
+
+  .team-setup__heading {
+    align-items: center;
   }
 
   .secondary-action--compact {
