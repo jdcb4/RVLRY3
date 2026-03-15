@@ -1,5 +1,6 @@
 import { lazy, Suspense, useEffect, useState } from 'react';
 import { Link, Route, Routes, useNavigate } from 'react-router-dom';
+import { PhoneIcon, UsersIcon } from './components/Icons';
 import { games } from './games/config';
 
 const PLAYER_NAME_STORAGE_KEY = 'rvlry.playerName';
