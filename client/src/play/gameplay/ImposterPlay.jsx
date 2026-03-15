@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react';
 import { useStageCue } from '../../audio/useGameAudio';
-import { SummaryChips } from '../../components/gameplay/SharedGameUi';
 import { DisclosurePanel, GameplayPlayerList, ResultsActions } from './common';
 
 export function ImposterPlay({
@@ -19,6 +18,10 @@ export function ImposterPlay({
   const stage = publicState?.stage;
   const results = publicState?.results;
   const currentTurnName = playersById.get(publicState.currentTurnPlayerId)?.name ?? 'Waiting';
+  const turnsTakenByPlayer = roomState.players.reduce((counts, player) => {
+    counts[player.id] = publicState.clueTurns.filter((turn) => turn.playerId === player.id).length;
+    return counts;
+  }, {});
 
   useStageCue(stage, {
     discussion: 'phase-change',
@@ -48,6 +51,13 @@ export function ImposterPlay({
   return (
     <div className="gameplay-stack">
       <section className="panel panel--hero panel--stacked gameplay-primary">
+        <div className="role-card">
+          <span className="helper-text">Role</span>
+          <strong className="role-card__title">{privateState?.role ?? 'Waiting'}</strong>
+          <span className="helper-text">Word</span>
+          <strong className="role-card__body">{privateState?.word ?? 'No word. Blend in.'}</strong>
+        </div>
+
         <div className="panel-heading">
           <p className="status-pill">
             {stage === 'clues'
@@ -58,40 +68,6 @@ export function ImposterPlay({
                   ? 'Voting'
                   : 'Results'}
           </p>
-          <h2>Your role</h2>
-          <p>Focus on the current move first.</p>
-        </div>
-
-        <SummaryChips
-          items={[
-            {
-              label: 'Stage',
-              value:
-                stage === 'clues'
-                  ? 'Clue'
-                  : stage === 'discussion'
-                    ? 'Discuss'
-                    : stage === 'voting'
-                      ? 'Vote'
-                      : 'Reveal'
-            },
-            stage === 'voting'
-              ? { label: 'Votes', value: `${publicState.votesSubmitted} / ${roomState.players.length}` }
-              : stage === 'discussion'
-                ? { label: 'Next', value: 'Vote' }
-                : { label: 'Turn', value: currentTurnName },
-            {
-              label: 'Spoken',
-              value: `${publicState.clueCount} / ${publicState.totalTurns}`
-            }
-          ]}
-        />
-
-        <div className="role-card">
-          <span className="helper-text">Role</span>
-          <strong className="role-card__title">{privateState?.role ?? 'Waiting'}</strong>
-          <span className="helper-text">Word</span>
-          <strong className="role-card__body">{privateState?.word ?? 'No word. Blend in.'}</strong>
         </div>
 
         {stage === 'clues' && privateState?.canAdvanceClueTurn && (
@@ -110,7 +86,10 @@ export function ImposterPlay({
         )}
 
         {stage === 'clues' && !privateState?.canAdvanceClueTurn && (
-          <p className="helper-text">{currentTurnName} is up. Listen to the room and get ready for your turn.</p>
+          <div className="notice-card">
+            <strong>Listen</strong>
+            <p>Listen to the other players while waiting for your turn.</p>
+          </div>
         )}
 
         {stage === 'discussion' && (
@@ -199,13 +178,13 @@ export function ImposterPlay({
       </section>
 
       <DisclosurePanel
-        title={stage === 'results' ? 'Vote board' : 'Spoken order'}
-        description={
+        title={stage === 'results' ? 'Vote board' : 'Players'}
+        description={stage === 'results' ? 'See how the room voted and who was accused.' : null}
+        summary={
           stage === 'results'
-            ? 'See how the room voted and who was accused.'
-            : 'Track who has already spoken without storing clues in the app.'
+            ? `${results?.voteTally?.length ?? 0} players`
+            : `${publicState.clueCount} / ${publicState.totalTurns} turns`
         }
-        summary={stage === 'results' ? `${results?.voteTally?.length ?? 0} players` : `${publicState.clueTurns.length} turns`}
         defaultOpen={stage === 'results'}
       >
         {stage === 'results' && results ? (
@@ -223,38 +202,25 @@ export function ImposterPlay({
               </li>
             ))}
           </ul>
-        ) : publicState.clueTurns.length > 0 ? (
-          <ul className="player-list">
-            {publicState.clueTurns.map((turn, index) => (
-              <li key={`${turn.playerId}-${turn.roundNumber}-${index}`} className="player-row player-row--compact">
-                <div className="player-row__identity">
-                  <span className="player-row__name">{playersById.get(turn.playerId)?.name ?? 'Player'}</span>
-                  <span className="helper-text">Round {turn.roundNumber}</span>
-                </div>
-              </li>
-            ))}
-          </ul>
         ) : (
-          <p className="helper-text">Spoken turns will appear here as players move through the room.</p>
+          <GameplayPlayerList
+            players={roomState.players}
+            playerId={playerId}
+            hostId={roomState.hostId}
+            getStatus={(player) => ({
+              text:
+                stage === 'clues'
+                  ? `${turnsTakenByPlayer[player.id] ?? 0}/${publicState.totalClueRounds}`
+                  : stage === 'voting' && (privateState?.votedForPlayerIds ?? []).includes(player.id)
+                    ? 'Accused'
+                    : stage === 'discussion'
+                      ? 'Discuss'
+                      : 'Waiting',
+              tone:
+                player.id === publicState.currentTurnPlayerId && stage === 'clues' ? 'ready' : 'default'
+            })}
+          />
         )}
-      </DisclosurePanel>
-
-      <DisclosurePanel title="Players" description="See who is up next." summary={`${roomState.players.length} connected`}>
-        <GameplayPlayerList
-          players={roomState.players}
-          playerId={playerId}
-          hostId={roomState.hostId}
-          getStatus={(player) => ({
-            text:
-              player.id === publicState.currentTurnPlayerId && stage === 'clues'
-                ? 'Current'
-                : stage === 'voting' && (privateState?.votedForPlayerIds ?? []).includes(player.id)
-                  ? 'Accused'
-                  : 'Waiting',
-            tone:
-              player.id === publicState.currentTurnPlayerId && stage === 'clues' ? 'ready' : 'default'
-          })}
-        />
       </DisclosurePanel>
     </div>
   );

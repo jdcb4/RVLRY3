@@ -190,6 +190,20 @@ export function CheckIcon() {
   );
 }
 
+export function MinusIcon() {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 20 20" fill="none">
+      <path
+        d="M6 10h8"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth="1.8"
+      />
+    </svg>
+  );
+}
+
 export function XIcon() {
   return (
     <svg aria-hidden="true" viewBox="0 0 20 20" fill="none">
