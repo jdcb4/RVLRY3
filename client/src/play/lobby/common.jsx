@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import {
   CheckIcon,
   CrownIcon,
+  MinusIcon,
   PencilIcon,
   XIcon
 } from '../../components/Icons';
@@ -57,7 +58,7 @@ function ReadyStateIcon({ playerName, ready }) {
       className={ready ? 'ready-mark ready-mark--ready' : 'ready-mark ready-mark--waiting'}
       role="img"
     >
-      {ready ? <CheckIcon /> : <XIcon />}
+      {ready ? <CheckIcon /> : <MinusIcon />}
     </span>
   );
 }

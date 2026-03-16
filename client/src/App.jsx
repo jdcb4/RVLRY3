@@ -163,6 +163,7 @@ function Home() {
                 <div className="hub-card__body">
                   <div>
                     <h2>{game.name}</h2>
+                    <span className="badge hub-card__players">{game.playerRangeLabel}</span>
                     <p className="hub-card__description">{game.description}</p>
                   </div>
                 </div>

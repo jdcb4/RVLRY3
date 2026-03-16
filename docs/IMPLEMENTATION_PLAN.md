@@ -22,6 +22,7 @@ RVLRY currently ships four games:
   - pass-and-play handoff mode
   - reveal browsing
   - reveal export
+  - undo / brush size / color controls on the drawing surface
 - **HatGame**
   - online multiplayer
   - pass-and-play
@@ -65,7 +66,9 @@ The client uses registries and per-game shells instead of one giant conditional 
 
 - Mobile-first layouts
 - Compact entry and lobby screens
+- Player-count guidance before room creation
 - Collapsible secondary information
+- In-lobby rules help via popover
 - Explicit hidden-information handoff screens
 - Consistent team management patterns
 - Minimal icon-based obvious actions where possible

@@ -1,8 +1,24 @@
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 
-export function ResultsActions({ isHost, roomCode, onReturnToLobby, pendingAction }) {
+export function ResultsActions({ isHost, roomCode, gameId, onReturnToLobby, pendingAction }) {
   if (!isHost) {
-    return <p className="helper-text">The host can return the room to the lobby for another round.</p>;
+    return (
+      <div className="field-stack">
+        <div className="notice-card notice-card--focus waiting-card">
+          <strong>Waiting for host to start a new game...</strong>
+          <p className="waiting-indicator">
+            <span aria-hidden="true" className="waiting-indicator__dot" />
+            Stay here for the next round, or head back to the game list.
+          </p>
+        </div>
+        <div className="actions actions--stretch">
+          <Link className="button-link button-link--secondary" to={`/play/${gameId}`}>
+            Back to home
+          </Link>
+        </div>
+      </div>
+    );
   }
 
   return (

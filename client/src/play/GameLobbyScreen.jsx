@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useAudioCues } from '../audio/AudioCueContext';
+import { InfoPopover } from '../components/InfoPopover';
 import { ShareIcon } from '../components/Icons';
 import { getGameModule } from '../games/registry';
 import { buildInviteLink, getStartHint } from './lobby/helpers';
@@ -35,6 +36,7 @@ export function GameLobbyScreen() {
     startGame
   } = usePlaySession();
   const gameModule = getGameModule(game.id);
+  const hatReadyHandlerRef = useRef(null);
   const [toastMessage, setToastMessage] = useState('');
   const [teamNameDrafts, setTeamNameDrafts] = useState({});
   const [settingsForm, setSettingsForm] = useState({
@@ -117,6 +119,23 @@ export function GameLobbyScreen() {
 
   const isHost = roomState?.hostId === playerId;
   const allPlayersReady = roomState?.players.every((player) => player.ready) ?? false;
+  const requiredPlayerCount = useMemo(() => {
+    if (game.id === 'imposter') {
+      return Math.max(game.minPlayers, settingsForm.imposterCount + 2);
+    }
+
+    if (gameModule.requiresTeams) {
+      return Math.max(game.minPlayers, (settingsForm.teamCount ?? 2) * 2);
+    }
+
+    return game.minPlayers;
+  }, [
+    game.id,
+    game.minPlayers,
+    gameModule.requiresTeams,
+    settingsForm.imposterCount,
+    settingsForm.teamCount
+  ]);
   const requiredHatClues =
     roomState?.lobbyState?.requiredCluesPerPlayer ??
     roomState?.settings?.cluesPerPlayer ??
@@ -134,6 +153,7 @@ export function GameLobbyScreen() {
     () => getStartHint({ roomState, game, gameModule, isHost, allPlayersReady }),
     [allPlayersReady, game, gameModule, isHost, roomState]
   );
+  const howToPlayItems = game.howToPlay ?? [];
   const readyHint =
     !canReadyUp && currentPlayer
       ? `Save all ${requiredHatClues} clues before readying up.`
@@ -177,7 +197,24 @@ export function GameLobbyScreen() {
 
   const handleSubmitHatClues = async (clues) => submitHatClues(roomCode, clues);
 
+  const registerHatReadyHandler = (handler) => {
+    hatReadyHandlerRef.current = handler;
+
+    return () => {
+      if (hatReadyHandlerRef.current === handler) {
+        hatReadyHandlerRef.current = null;
+      }
+    };
+  };
+
   const handleReadyToggle = async () => {
+    if (gameModule.requiresHatClues && !currentPlayer?.ready) {
+      const prepareResponse = await hatReadyHandlerRef.current?.();
+      if (!prepareResponse?.ok) {
+        return;
+      }
+    }
+
     await setReady(roomCode, !currentPlayer?.ready);
   };
 
@@ -227,6 +264,9 @@ export function GameLobbyScreen() {
         <section className="panel panel--hero panel--stacked">
           <div className="room-code-card room-code-card--bare">
             <strong className="room-code-card__value">{roomState.code}</strong>
+            <p className="helper-text room-code-card__meta">
+              {roomState.players.length} / {requiredPlayerCount} players joined
+            </p>
           </div>
 
           <div className="actions actions--compact">
@@ -251,6 +291,16 @@ export function GameLobbyScreen() {
                 <ShareIcon />
               </button>
             )}
+            <InfoPopover label={`How to play ${game.name}`} title={`How to play ${game.name}`}>
+              <ol className="step-list step-list--compact">
+                {howToPlayItems.map((item, index) => (
+                  <li key={`${game.id}-lobby-rule-${index}`} className="step-card">
+                    <span className="step-card__index">0{index + 1}</span>
+                    <span>{item}</span>
+                  </li>
+                ))}
+              </ol>
+            </InfoPopover>
           </div>
 
           {toastMessage && <p className="toast">{toastMessage}</p>}
@@ -271,6 +321,7 @@ export function GameLobbyScreen() {
           rebalanceTeams={rebalanceTeams}
           lobbyPrivateState={lobbyPrivateState}
           submitHatClues={handleSubmitHatClues}
+          registerHatReadyHandler={registerHatReadyHandler}
           kickPlayer={kickPlayer}
           setError={setError}
           error={error}
@@ -287,11 +338,11 @@ export function GameLobbyScreen() {
               disabled={
                 !currentPlayer ||
                 pendingAction === 'ready' ||
-                (!currentPlayer?.ready && !canReadyUp)
+                (!gameModule.requiresHatClues && !currentPlayer?.ready && !canReadyUp)
               }
               onClick={handleReadyToggle}
             >
-              {currentPlayer?.ready ? 'Unready' : 'Ready'}
+              {currentPlayer?.ready ? 'Unready' : gameModule.requiresHatClues ? 'Save & Ready' : 'Ready'}
             </button>
             {isHost && (
               <button disabled={pendingAction === 'start' || Boolean(startHint)} onClick={handleStartGame}>

@@ -116,7 +116,10 @@ export function ImposterPlay({
             <div className="notice-card">
               <strong>Discussed? Vote now.</strong>
               <p>
-                Pick {privateState.voteTargetCount} player{privateState.voteTargetCount === 1 ? '' : 's'} you think are imposters.
+                Pick {privateState.voteTargetCount}{' '}
+                {privateState.voteTargetCount === 1
+                  ? 'player you think is the imposter.'
+                  : 'players you think are the imposters.'}
               </p>
             </div>
             <div className="actions actions--stretch">
@@ -170,6 +173,7 @@ export function ImposterPlay({
             <ResultsActions
               isHost={isHost}
               roomCode={roomCode}
+              gameId={roomState.gameId}
               onReturnToLobby={returnRoomToLobby}
               pendingAction={pendingAction}
             />

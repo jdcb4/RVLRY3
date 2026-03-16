@@ -268,6 +268,7 @@ export function WhoWhatWherePlay({
           <ResultsActions
             isHost={isHost}
             roomCode={roomCode}
+            gameId={roomState.gameId}
             onReturnToLobby={returnRoomToLobby}
             pendingAction={pendingAction}
           />

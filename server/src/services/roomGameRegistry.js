@@ -256,7 +256,7 @@ const ROOM_GAME_REGISTRY = {
     getDefaultSettings: () => sanitizeDrawNGuessSettings(),
     sanitizeSettings: sanitizeDrawNGuessSettings,
     validateReady: validateDrawNGuessReady,
-    validateStart: (room) => validateDrawNGuessStart(room, 2)
+    validateStart: (room) => validateDrawNGuessStart(room, 3)
   },
   whowhatwhere: {
     ...TEAM_ROOM_GAME,

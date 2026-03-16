@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { InfoPopover } from '../../components/InfoPopover';
 import { InfoIcon, ShuffleIcon, UsersIcon } from '../../components/Icons';
 import { fetchHatGameSuggestions } from '../../games/contentApi';
@@ -21,6 +21,7 @@ export function HatGameLobby({
   kickPlayer,
   lobbyPrivateState,
   submitHatClues,
+  registerHatReadyHandler,
   setError,
   error,
   onToast,
@@ -36,6 +37,7 @@ export function HatGameLobby({
     Array.from({ length: requiredClues }, () => '')
   );
   const [loadingSuggestions, setLoadingSuggestions] = useState(false);
+  const [inlineError, setInlineError] = useState('');
 
   useEffect(() => {
     const submittedClues = Array.isArray(lobbyPrivateState?.clues) ? lobbyPrivateState.clues : [];
@@ -65,6 +67,7 @@ export function HatGameLobby({
   ];
 
   const handleGenerateSuggestions = async () => {
+    setInlineError('');
     setError('');
     setLoadingSuggestions(true);
 
@@ -93,24 +96,37 @@ export function HatGameLobby({
   };
 
   const handleClueChange = (index, value) => {
+    setInlineError('');
     setClueDrafts((currentDrafts) =>
       currentDrafts.map((draft, draftIndex) => (draftIndex === index ? value : draft))
     );
   };
 
-  const handleSubmit = async () => {
+  const handleSubmit = useCallback(async () => {
     const normalizedClues = clueDrafts.map((clue) => clue.trim());
     if (normalizedClues.some((clue) => clue.length === 0)) {
-      setError('Fill in every clue before saving');
-      return;
+      setInlineError(`Fill in all ${requiredClues} clues before readying up.`);
+      return { error: 'Fill in every clue before saving' };
     }
 
     const response = await submitHatClues(normalizedClues);
     if (response.ok) {
-      onToast('Clues saved');
+      setInlineError('');
       onPlaySubmitCue();
+      return response;
     }
-  };
+
+    setInlineError(response.error ?? 'Unable to save clues right now');
+    return response;
+  }, [clueDrafts, onPlaySubmitCue, requiredClues, submitHatClues]);
+
+  useEffect(() => {
+    if (!registerHatReadyHandler) {
+      return undefined;
+    }
+
+    return registerHatReadyHandler(handleSubmit);
+  }, [handleSubmit, registerHatReadyHandler]);
 
   const handleRebalance = async () => {
     const response = await rebalanceTeams(roomCode);
@@ -166,14 +182,9 @@ export function HatGameLobby({
           >
             {loadingSuggestions ? 'Loading suggestions' : 'Give me suggestions'}
           </button>
-          <button disabled={pendingAction === 'submit-hat-clues'} onClick={handleSubmit}>
-            Save clues
-          </button>
         </div>
 
-        {savedCount < requiredClues ? (
-          <p className="helper-text">Save every clue before you ready up.</p>
-        ) : null}
+        {inlineError ? <p className="connection-banner connection-banner--error">{inlineError}</p> : null}
       </LobbyDisclosure>
 
       <LobbyDisclosure title="Teams" summary={`${teamRosters.length} teams`} icon={<UsersIcon />}>

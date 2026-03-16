@@ -10,10 +10,17 @@ RVLRY is a mobile-first multiplayer parlor game app built with React, Vite, Expr
   Team-based timed clue game with rotating describers, buffered word decks, and skipped-word return flow.
 - **DrawNGuess**
   Drawing-and-guessing chaos.
-  Online mode uses simultaneous “books” for all players at once.
+  Online mode uses simultaneous "books" for all players at once.
   Pass-and-play mode uses a single-device handoff flow.
 - **HatGame**
   Celebrity!-style three-phase team game with editable clue packs, auto-suggestions from the `Who` list, phase rollover, and both online + pass-and-play support.
+
+Recommended player ranges:
+
+- Imposter: `3+ players`
+- WhoWhatWhere: `4-12 players`
+- DrawNGuess: `3+ players`
+- HatGame: `4-12 players`
 
 ## Current product shape
 
@@ -21,8 +28,11 @@ RVLRY is a mobile-first multiplayer parlor game app built with React, Vite, Expr
   - player name
   - join-by-code
   - host-a-game flow
+  - visible player-range badges before a room is created
 - Online lobbies with:
   - ready states
+  - live joined/required player counters near the room code
+  - in-lobby "How to play" help popovers
   - team management where relevant
   - host controls
   - compact settings panels
@@ -40,7 +50,12 @@ RVLRY is a mobile-first multiplayer parlor game app built with React, Vite, Expr
   - five-second warning
   - handoffs
   - results
+  - correct / skip in local timed team turns
   - HatGame mid-turn phase changes
+- DrawNGuess drawing tools with:
+  - undo
+  - variable brush sizes with larger touch defaults
+  - small color palette selection
 - Word sync + caching through WordListManager
 
 ## Repository layout

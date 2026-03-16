@@ -1,5 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
+const DRAW_COLORS = ['#111111', '#ff8a5b', '#60b2ff', '#7ed8b1', '#f5c96b'];
+const DRAW_BRUSH_SIZES = [4, 7, 10];
+const getDefaultBrushSize = () =>
+  window.matchMedia?.('(pointer: coarse)')?.matches || (navigator.maxTouchPoints ?? 0) > 0 ? 7 : 4;
+
 export function SummaryChips({ items }) {
   return (
     <div className="summary-chips">
@@ -186,6 +191,17 @@ export function DrawingPad({
 }) {
   const canvasRef = useRef(null);
   const drawingRef = useRef(false);
+  const historyRef = useRef([]);
+  const [brushSize, setBrushSize] = useState(() => getDefaultBrushSize());
+  const [strokeColor, setStrokeColor] = useState(() => DRAW_COLORS[0]);
+  const [canUndo, setCanUndo] = useState(false);
+
+  const applyBrushSettings = useCallback((context) => {
+    context.lineJoin = 'round';
+    context.lineCap = 'round';
+    context.lineWidth = brushSize;
+    context.strokeStyle = strokeColor;
+  }, [brushSize, strokeColor]);
 
   const initializeCanvas = useCallback(() => {
     const canvas = canvasRef.current;
@@ -208,15 +224,21 @@ export function DrawingPad({
     context.scale(ratio, ratio);
     context.fillStyle = '#ffffff';
     context.fillRect(0, 0, width, height);
-    context.lineJoin = 'round';
-    context.lineCap = 'round';
-    context.lineWidth = 4;
-    context.strokeStyle = '#111111';
-  }, []);
+    applyBrushSettings(context);
+    historyRef.current = [];
+    setCanUndo(false);
+  }, [applyBrushSettings]);
 
   useEffect(() => {
     initializeCanvas();
   }, [initializeCanvas, prompt]);
+
+  useEffect(() => {
+    const context = canvasRef.current?.getContext('2d');
+    if (context) {
+      applyBrushSettings(context);
+    }
+  }, [applyBrushSettings]);
 
   const getPoint = (event) => {
     const canvas = canvasRef.current;
@@ -235,8 +257,11 @@ export function DrawingPad({
     const canvas = canvasRef.current;
     const context = canvas.getContext('2d');
     const point = getPoint(event);
+    historyRef.current.push(context.getImageData(0, 0, 320, 220));
+    setCanUndo(true);
     drawingRef.current = true;
     canvas.setPointerCapture(event.pointerId);
+    applyBrushSettings(context);
     context.beginPath();
     context.moveTo(point.x, point.y);
   };
@@ -262,12 +287,54 @@ export function DrawingPad({
     canvasRef.current?.releasePointerCapture?.(event.pointerId);
   };
 
+  const handleUndo = () => {
+    if (disabled || historyRef.current.length === 0) {
+      return;
+    }
+
+    const context = canvasRef.current?.getContext('2d');
+    const previousImage = historyRef.current.pop();
+    if (context && previousImage) {
+      context.putImageData(previousImage, 0, 0);
+      applyBrushSettings(context);
+      setCanUndo(historyRef.current.length > 0);
+    }
+  };
+
   return (
     <div className="field-stack">
       <div className="role-card">
         <span className="helper-text">{promptLabel}</span>
         <strong className="role-card__title">{prompt}</strong>
         <span className="role-card__body">{hintText}</span>
+      </div>
+      <div className="drawing-toolbar">
+        <div className="drawing-toolbar__group" aria-label="Brush size">
+          {DRAW_BRUSH_SIZES.map((size) => (
+            <button
+              key={size}
+              type="button"
+              className={brushSize === size ? 'secondary-action drawing-tool drawing-tool--active' : 'secondary-action drawing-tool'}
+              disabled={disabled}
+              onClick={() => setBrushSize(size)}
+            >
+              {size}px
+            </button>
+          ))}
+        </div>
+        <div className="drawing-toolbar__group" aria-label="Brush colour">
+          {DRAW_COLORS.map((color) => (
+            <button
+              key={color}
+              type="button"
+              aria-label={`Use ${color} brush`}
+              className={strokeColor === color ? 'drawing-swatch drawing-swatch--active' : 'drawing-swatch'}
+              disabled={disabled}
+              style={{ '--swatch-color': color }}
+              onClick={() => setStrokeColor(color)}
+            />
+          ))}
+        </div>
       </div>
       <div className="canvas-wrap">
         <canvas
@@ -280,6 +347,13 @@ export function DrawingPad({
         />
       </div>
       <div className="actions actions--stretch">
+        <button
+          className="secondary-action"
+          disabled={disabled || !canUndo}
+          onClick={handleUndo}
+        >
+          Undo
+        </button>
         <button className="secondary-action" disabled={disabled} onClick={initializeCanvas}>
           {clearLabel}
         </button>

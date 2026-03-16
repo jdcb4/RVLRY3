@@ -882,6 +882,10 @@ summary:focus-visible {
   margin: 0;
 }
 
+.hub-card__players {
+  margin-top: 0.55rem;
+}
+
 .hub-card__description {
   margin-top: 0.55rem;
 }
@@ -959,6 +963,10 @@ summary:focus-visible {
   place-items: center;
   gap: 0;
   text-align: center;
+}
+
+.room-code-card__meta {
+  margin-top: 0.45rem;
 }
 
 .room-code-card__value,
@@ -1074,6 +1082,10 @@ summary:focus-visible {
 .step-list {
   display: grid;
   gap: 0.8rem;
+}
+
+.step-list--compact {
+  gap: 0.6rem;
 }
 
 .step-card {
@@ -1470,6 +1482,71 @@ summary:focus-visible {
 .drawing-surface {
   touch-action: none;
   box-shadow: inset 0 0 0 1px rgba(17, 17, 17, 0.04);
+}
+
+.drawing-toolbar,
+.drawing-toolbar__group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+}
+
+.drawing-toolbar {
+  justify-content: space-between;
+  align-items: center;
+}
+
+.drawing-tool {
+  min-width: 3.25rem;
+}
+
+.drawing-tool--active {
+  border-color: rgba(255, 138, 91, 0.28);
+  background: rgba(255, 138, 91, 0.12);
+}
+
+.drawing-swatch {
+  width: 2rem;
+  height: 2rem;
+  padding: 0;
+  border-radius: 999px;
+  border: 2px solid rgba(255, 255, 255, 0.12);
+  background: var(--swatch-color);
+}
+
+.drawing-swatch--active {
+  border-color: rgba(255, 255, 255, 0.85);
+  box-shadow: 0 0 0 2px rgba(255, 138, 91, 0.3);
+}
+
+.waiting-card {
+  align-items: flex-start;
+}
+
+.waiting-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+}
+
+.waiting-indicator__dot {
+  width: 0.65rem;
+  height: 0.65rem;
+  border-radius: 999px;
+  background: var(--accent);
+  animation: pulse-dot 1.2s ease-in-out infinite;
+}
+
+@keyframes pulse-dot {
+  0%,
+  100% {
+    opacity: 0.45;
+    transform: scale(0.9);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1);
+  }
 }
 
 .results-chain {
