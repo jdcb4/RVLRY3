@@ -1498,11 +1498,21 @@ summary:focus-visible {
 
 .drawing-tool {
   min-width: 3.25rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .drawing-tool--active {
   border-color: rgba(255, 138, 91, 0.28);
   background: rgba(255, 138, 91, 0.12);
+}
+
+.drawing-tool__preview {
+  width: var(--brush-preview-size);
+  height: var(--brush-preview-size);
+  border-radius: 999px;
+  background: currentColor;
 }
 
 .drawing-swatch {

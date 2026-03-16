@@ -192,6 +192,8 @@ export function DrawingPad({
   const canvasRef = useRef(null);
   const drawingRef = useRef(false);
   const historyRef = useRef([]);
+  const brushSizeRef = useRef(getDefaultBrushSize());
+  const strokeColorRef = useRef(DRAW_COLORS[0]);
   const [brushSize, setBrushSize] = useState(() => getDefaultBrushSize());
   const [strokeColor, setStrokeColor] = useState(() => DRAW_COLORS[0]);
   const [canUndo, setCanUndo] = useState(false);
@@ -224,10 +226,18 @@ export function DrawingPad({
     context.scale(ratio, ratio);
     context.fillStyle = '#ffffff';
     context.fillRect(0, 0, width, height);
-    applyBrushSettings(context);
+    context.lineJoin = 'round';
+    context.lineCap = 'round';
+    context.lineWidth = brushSizeRef.current;
+    context.strokeStyle = strokeColorRef.current;
     historyRef.current = [];
     setCanUndo(false);
-  }, [applyBrushSettings]);
+  }, []);
+
+  useEffect(() => {
+    brushSizeRef.current = brushSize;
+    strokeColorRef.current = strokeColor;
+  }, [brushSize, strokeColor]);
 
   useEffect(() => {
     initializeCanvas();
@@ -310,15 +320,22 @@ export function DrawingPad({
       </div>
       <div className="drawing-toolbar">
         <div className="drawing-toolbar__group" aria-label="Brush size">
-          {DRAW_BRUSH_SIZES.map((size) => (
+          {DRAW_BRUSH_SIZES.map((size, index) => (
             <button
               key={size}
               type="button"
+              aria-label={
+                index === 0 ? 'Use small brush' : index === 1 ? 'Use medium brush' : 'Use large brush'
+              }
               className={brushSize === size ? 'secondary-action drawing-tool drawing-tool--active' : 'secondary-action drawing-tool'}
               disabled={disabled}
               onClick={() => setBrushSize(size)}
             >
-              {size}px
+              <span
+                aria-hidden="true"
+                className="drawing-tool__preview"
+                style={{ '--brush-preview-size': `${size + 2}px` }}
+              />
             </button>
           ))}
         </div>
