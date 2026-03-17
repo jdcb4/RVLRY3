@@ -37,7 +37,6 @@ export function HatGameLobby({
     Array.from({ length: requiredClues }, () => '')
   );
   const [loadingSuggestions, setLoadingSuggestions] = useState(false);
-  const [inlineError, setInlineError] = useState('');
 
   useEffect(() => {
     const submittedClues = Array.isArray(lobbyPrivateState?.clues) ? lobbyPrivateState.clues : [];
@@ -58,7 +57,7 @@ export function HatGameLobby({
   }, [lobbyPrivateState?.clues, requiredClues]);
 
   const savedCount = lobbyPrivateState?.submittedCount ?? 0;
-  const optionsSummary = `${settingsForm.teamCount} teams / ${settingsForm.turnDurationSeconds}s`;
+  const optionsSummary = `${settingsForm.teamCount} teams / ${settingsForm.turnDurationSeconds}s / ${settingsForm.cluesPerPlayer} clues / ${settingsForm.skipsPerTurn} skip${settingsForm.skipsPerTurn === 1 ? '' : 's'}`;
   const optionsList = [
     { label: 'Teams', value: `${settingsForm.teamCount}` },
     { label: 'Turn length', value: `${settingsForm.turnDurationSeconds}s` },
@@ -67,7 +66,6 @@ export function HatGameLobby({
   ];
 
   const handleGenerateSuggestions = async () => {
-    setInlineError('');
     setError('');
     setLoadingSuggestions(true);
 
@@ -96,7 +94,6 @@ export function HatGameLobby({
   };
 
   const handleClueChange = (index, value) => {
-    setInlineError('');
     setClueDrafts((currentDrafts) =>
       currentDrafts.map((draft, draftIndex) => (draftIndex === index ? value : draft))
     );
@@ -105,20 +102,19 @@ export function HatGameLobby({
   const handleSubmit = useCallback(async () => {
     const normalizedClues = clueDrafts.map((clue) => clue.trim());
     if (normalizedClues.some((clue) => clue.length === 0)) {
-      setInlineError(`Fill in all ${requiredClues} clues before readying up.`);
+      onToast(`Fill in all ${requiredClues} clues before readying up.`);
       return { error: 'Fill in every clue before saving' };
     }
 
     const response = await submitHatClues(normalizedClues);
     if (response.ok) {
-      setInlineError('');
       onPlaySubmitCue();
       return response;
     }
 
-    setInlineError(response.error ?? 'Unable to save clues right now');
+    onToast(response.error ?? 'Unable to save clues right now');
     return response;
-  }, [clueDrafts, onPlaySubmitCue, requiredClues, submitHatClues]);
+  }, [clueDrafts, onPlaySubmitCue, onToast, requiredClues, submitHatClues]);
 
   useEffect(() => {
     if (!registerHatReadyHandler) {
@@ -183,8 +179,6 @@ export function HatGameLobby({
             {loadingSuggestions ? 'Loading suggestions' : 'Give me suggestions'}
           </button>
         </div>
-
-        {inlineError ? <p className="connection-banner connection-banner--error">{inlineError}</p> : null}
       </LobbyDisclosure>
 
       <LobbyDisclosure title="Teams" summary={`${teamRosters.length} teams`} icon={<UsersIcon />}>

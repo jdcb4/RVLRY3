@@ -194,6 +194,13 @@ export function WhoWhatWherePlay({
               <p>Only the describer sees the word.</p>
             </div>
 
+            <SummaryChips
+              items={[
+                { label: 'Turn score', value: turn?.score ?? 0 },
+                { label: 'Skipped waiting', value: turn?.pendingSkippedCount ?? 0 }
+              ]}
+            />
+
             {turn?.pendingSkippedCount > 0 ? (
               <div className="notice-card">
                 <strong>
@@ -235,6 +242,8 @@ export function WhoWhatWherePlay({
             <strong>Wait for your team&apos;s turn</strong>
             <p>The word stays hidden until your turn.</p>
           </div>
+
+          <SummaryChips items={[{ label: 'Turn score', value: turn?.score ?? 0 }]} />
 
           <TeamTurnOrder
             teams={activeTeamOrder}

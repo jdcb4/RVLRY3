@@ -21,7 +21,7 @@ export function WhoWhatWhereLobby({
   onToast
 }) {
   const teamRosters = useMemo(() => buildTeamRosters(roomState), [roomState]);
-  const optionsSummary = `${settingsForm.teamCount} teams / ${settingsForm.turnDurationSeconds}s`;
+  const optionsSummary = `${settingsForm.teamCount} teams / ${settingsForm.turnDurationSeconds}s / ${settingsForm.totalRounds} rounds / ${settingsForm.skipLimit < 0 ? 'unlimited skips' : `${settingsForm.skipLimit} skip${settingsForm.skipLimit === 1 ? '' : 's'}`}`;
   const optionsList = [
     { label: 'Teams', value: `${settingsForm.teamCount}` },
     { label: 'Turn length', value: `${settingsForm.turnDurationSeconds}s` },

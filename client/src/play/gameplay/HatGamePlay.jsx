@@ -240,6 +240,13 @@ export function HatGamePlay({
               description="Call names out loud while the describer keeps the cards moving."
             />
 
+            <SummaryChips
+              items={[
+                { label: 'Turn score', value: turn?.score ?? 0 },
+                { label: 'Skipped waiting', value: turn?.pendingSkippedCount ?? 0 }
+              ]}
+            />
+
             {turn?.showingSkippedClue || (turn?.pendingSkippedCount ?? 0) > 0 ? (
               <div className="notice-card">
                 <strong>{turn?.showingSkippedClue ? 'Working through skipped clues' : 'Skipped clues waiting'}</strong>
@@ -273,6 +280,8 @@ export function HatGamePlay({
               phaseInstruction={publicState.phaseInstruction}
             />
           </div>
+
+          <SummaryChips items={[{ label: 'Turn score', value: turn?.score ?? 0 }]} />
 
           <TeamTurnOrder
             teams={activeTeamOrder}
