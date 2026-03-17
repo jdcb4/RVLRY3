@@ -20,7 +20,7 @@ const GAME_WORD_TYPE = {
 const GAME_MIN_PLAYERS = {
   imposter: 3,
   whowhatwhere: 4,
-  drawnguess: 2,
+  drawnguess: 3,
   hatgame: 4
 };
 

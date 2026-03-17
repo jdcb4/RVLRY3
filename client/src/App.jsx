@@ -21,6 +21,9 @@ const GamePlayScreen = lazy(() =>
 const PlayShell = lazy(() =>
   import('./play/PlayShell').then((module) => ({ default: module.PlayShell }))
 );
+const AdminScreen = lazy(() =>
+  import('./admin/AdminScreen').then((module) => ({ default: module.AdminScreen }))
+);
 
 function HostModeToggle({ mode, onChange }) {
   return (
@@ -190,6 +193,7 @@ export default function App() {
   return (
     <Routes>
       <Route path="/" element={<Home />} />
+      <Route path="/admin" element={withSuspense(<AdminScreen />)} />
       <Route path="/play/:gameId" element={withSuspense(<PlayShell />)}>
         <Route index element={withSuspense(<GameLanding />)} />
         <Route path="join/:roomCode" element={withSuspense(<GameLanding />)} />

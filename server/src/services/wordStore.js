@@ -235,7 +235,14 @@ export function createWordStore({ cacheFilePath = DEFAULT_CACHE_PATH } = {}) {
       lastSyncAt,
       lastCacheLoadAt,
       loadedTypes: [...wordsByType.keys()],
-      cacheFilePath
+      cacheFilePath,
+      sourceBaseUrl: WORDLIST_BASE_URL,
+      types: DEFAULT_TYPES.map((type) => ({
+        type,
+        wordCount: (wordsByType.get(type) ?? []).length,
+        categoryCount: getCategories(type).length,
+        lastUpdatedAt: lastSyncAt
+      }))
     })
   };
 }

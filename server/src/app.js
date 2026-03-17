@@ -5,6 +5,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Server } from 'socket.io';
 import { lookupRoomSummary, registerRoomHandlers } from './services/rooms.js';
+import { adminRouter } from './routes/admin.js';
 import { wordsRouter } from './routes/words.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -13,6 +14,7 @@ const DEFAULT_CLIENT_DIST_PATH = path.resolve(__dirname, '../../client/dist');
 
 export function createAppServer({
   wordStore,
+  adminPassword = process.env.ADMIN_PASSWORD ?? '',
   clientDistPath = DEFAULT_CLIENT_DIST_PATH,
   staticFiles = true
 }) {
@@ -21,7 +23,9 @@ export function createAppServer({
   app.use(express.json());
 
   const rooms = new Map();
+  const adminSessions = new Map();
 
+  app.use('/api/admin', adminRouter({ wordStore, adminPassword, sessions: adminSessions }));
   app.use('/api/words', wordsRouter(wordStore));
   app.get('/api/rooms/:code', (req, res) => {
     const room = lookupRoomSummary(rooms, req.params.code);

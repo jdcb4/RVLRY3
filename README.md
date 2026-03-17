@@ -56,6 +56,10 @@ Recommended player ranges:
   - undo
   - variable brush sizes with larger touch defaults
   - small color palette selection
+- Admin interface at `/admin` with:
+  - password-gated access
+  - wordlist source / sync status
+  - manual wordlist refresh
 - Word sync + caching through WordListManager
 
 ## Repository layout
@@ -116,6 +120,7 @@ Optional environment variable:
 
 ```bash
 WORDLIST_BASE_URL=https://wordlistmanager-production.up.railway.app
+ADMIN_PASSWORD=your-admin-password
 ```
 
 Relevant endpoints:

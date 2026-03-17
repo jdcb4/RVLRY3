@@ -62,8 +62,24 @@ const createTestWordStore = () => ({
   startSchedule: () => undefined,
   status: () => ({
     lastSyncAt: '2026-03-12T00:00:00.000Z',
+    lastCacheLoadAt: '2026-03-11T00:00:00.000Z',
     loadedTypes: Object.keys(TEST_DATA),
-    cacheFilePath: 'memory'
+    cacheFilePath: 'memory',
+    sourceBaseUrl: 'https://wordlist.example.test',
+    types: [
+      {
+        type: 'guessing',
+        wordCount: TEST_DATA.guessing.length,
+        categoryCount: 3,
+        lastUpdatedAt: '2026-03-12T00:00:00.000Z'
+      },
+      {
+        type: 'describing',
+        wordCount: TEST_DATA.describing.length,
+        categoryCount: 3,
+        lastUpdatedAt: '2026-03-12T00:00:00.000Z'
+      }
+    ]
   })
 });
 
@@ -185,6 +201,54 @@ describe.sequential('RVLRY server integration', () => {
     expect(response.body.type).toBe('guessing');
     expect(response.body.category).toBeTruthy();
     expect(response.body.words).toHaveLength(3);
+  });
+
+  it('protects admin endpoints behind the configured password', async () => {
+    const wordStore = createTestWordStore();
+    const adminServer = createAppServer({
+      wordStore,
+      adminPassword: 'secret-pass',
+      staticFiles: false
+    });
+    const adminRequest = request.agent(adminServer.app);
+
+    const denied = await adminRequest.get('/api/admin/status');
+    expect(denied.status).toBe(401);
+
+    const badLogin = await adminRequest
+      .post('/api/admin/login')
+      .send({ password: 'wrong-pass' });
+    expect(badLogin.status).toBe(401);
+
+    const login = await adminRequest
+      .post('/api/admin/login')
+      .send({ password: 'secret-pass' });
+    expect(login.status).toBe(200);
+    expect(login.body.ok).toBe(true);
+
+    const status = await adminRequest.get('/api/admin/status');
+    expect(status.status).toBe(200);
+    expect(status.body).toMatchObject({
+      sourceBaseUrl: 'https://wordlist.example.test',
+      lastSyncAt: '2026-03-12T00:00:00.000Z'
+    });
+    expect(status.body.lists).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: 'guessing',
+          usedBy: ['WhoWhatWhere', 'HatGame']
+        }),
+        expect.objectContaining({
+          type: 'describing',
+          usedBy: ['Imposter', 'DrawNGuess']
+        })
+      ])
+    );
+
+    const refreshed = await adminRequest.post('/api/admin/wordlists/refresh').send({});
+    expect(refreshed.status).toBe(200);
+    expect(refreshed.body.ok).toBe(true);
+    expect(refreshed.body.status.lists).toHaveLength(2);
   });
 
   it('looks up a room by code for the home join flow', async () => {
